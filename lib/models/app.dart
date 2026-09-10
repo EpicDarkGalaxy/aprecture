@@ -4,6 +4,7 @@ class App {
   final String versionName;
   final String summary;
   final String description;
+  final List<String> categories;
   final String iconUrl;
 
   App({
@@ -12,6 +13,7 @@ class App {
     required this.versionName,
     required this.summary,
     required this.description,
+    required this.categories,
     required this.iconUrl,
   });
 
@@ -25,6 +27,7 @@ class App {
       versionName: json['versionName'] ?? 'NOVERSION',
       summary: json['summary'] ?? 'NOSUMMARY',
       description: json['description'] ?? 'NODESCRIPTION',
+       categories: (json['categories'] as List?)?.cast<String>() ?? const [],
       iconUrl: json['iconUrl'] ?? 'NOICON',
     );
   }

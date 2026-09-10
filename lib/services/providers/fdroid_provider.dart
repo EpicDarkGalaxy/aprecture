@@ -109,6 +109,7 @@ class FdroidProvider {
             'versionName': _getVersionName(pkgData),
             'summary': _cleanHtml(_getLocalized('summary', metadata)),
             'description': _cleanHtml(_getLocalized('description', metadata)),
+            'categories': (metadata['categories'] as List?) ?? [],
             'iconUrl': _getIconUrl(metadata),
           };
         }
