@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:aprecture/screens/home_screen.dart';
 
-
 void main() {
   runApp(const Aprecture());
 }

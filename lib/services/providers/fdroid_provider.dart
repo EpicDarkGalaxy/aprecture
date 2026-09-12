@@ -1,25 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:aprecture/models/app.dart';
+import 'package:aprecture/services/logger.dart';
 import 'package:http/http.dart' as http;
-import 'package:logger/logger.dart' as logger;
 
 class FdroidProvider {
-  final logger.Logger _logger = logger.Logger();
   final http.Client _httpClient = http.Client();
 
   static const String _repoBaseUrl = 'https://f-droid.org/repo';
-
-  List<App> wrap(Map<String, dynamic> packages) {
-    _logger.d('Wrapping packages into a list of App objects...');
-
-    final List<App> apps = [];
-    for (final package in packages.entries) {
-      final app = App.fromJson(packageName: package.key, json: package.value);
-      apps.add(app);
-    }
-    return apps;
-  }
 
   String _getLocalized(String key, Map<String, dynamic> metadata) {
     final localized = metadata[key];
@@ -71,27 +57,15 @@ class FdroidProvider {
         .trim();
   }
 
-  Future<List<App>> getApps() async {
-    final tempDir = Directory.systemTemp;
-    final tempFile = File('${tempDir.path}/index-v2.json');
-
-    if (await tempFile.exists()) {
-      _logger.d('Using cached index-v2.json from F-Droid...');
-      final data = jsonDecode(await tempFile.readAsString());
-
-      final apps = wrap(data);
-      _logger.i('Loaded ${apps.length} apps from cache');
-      return apps;
-    }
-
+  Future<Map<String, dynamic>> getApps() async {
     try {
-      _logger.d('Fetching apps from F-Droid...');
+      logger.d('Fetching apps from F-Droid...');
 
       final response = await _httpClient.get(
         Uri.parse('https://f-droid.org/repo/index-v2.json'),
       );
 
-      _logger.d('Response CODE: ${response.statusCode}');
+      logger.d('Response CODE: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -113,17 +87,14 @@ class FdroidProvider {
             'iconUrl': _getIconUrl(metadata),
           };
         }
-        await tempFile.writeAsString(jsonEncode(formattedData));
-        final apps = wrap(formattedData);
-        _logger.i('Fetched ${apps.length} apps from F-Droid');
-        return apps;
+        return formattedData;
       } else {
-        _logger.e('Failed to fetch apps from F-Droid: ${response.statusCode}');
-        return [];
+        logger.e('Failed to fetch apps from F-Droid: ${response.statusCode}');
+        return {};
       }
     } catch (e, stackTrace) {
-      _logger.e('Error fetching apps from F-Droid: $e', stackTrace: stackTrace);
-      return [];
+      logger.e('Error fetching apps from F-Droid: $e', stackTrace: stackTrace);
+      return {};
     }
   }
 }

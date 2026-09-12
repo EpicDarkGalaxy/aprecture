@@ -1,19 +1,18 @@
 import 'package:aprecture/models/app.dart';
-import 'package:aprecture/services/asset_manager.dart';
+import 'package:aprecture/services/asset_service.dart';
 import 'package:flutter/material.dart';
+import 'package:aprecture/services/logger.dart';
 
 class AppDetailsScreen extends StatelessWidget {
   final App app;
-  const AppDetailsScreen({super.key, required this.app});
 
+  const AppDetailsScreen({super.key, required this.app});
 
   Widget appIcon() {
     return SizedBox(
       width: 100,
       height: 100,
-      child: CircleAvatar(
-        child: AssetManager.getIcon(app.iconUrl),
-      ),
+      child: CircleAvatar(child: AssetService.getIcon(app.iconUrl)),
     );
   }
 
@@ -21,6 +20,7 @@ class AppDetailsScreen extends StatelessWidget {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Text(
             app.name,
@@ -34,6 +34,12 @@ class AppDetailsScreen extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 16),
           ),
+          Text(
+            app.categories.join(', '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 16),
+          )
         ],
       ),
     );
@@ -42,7 +48,7 @@ class AppDetailsScreen extends StatelessWidget {
   Widget appGetButton() {
     return ElevatedButton(
       onPressed: () {
-        print("INSTALLING");
+        logger.d("INSTALLING");
       },
       child: const Text('Get'),
     );
@@ -59,10 +65,7 @@ class AppDetailsScreen extends StatelessWidget {
             borderRadius: BorderRadius.circular(16.0),
             border: Border.all(color: Colors.grey.shade400, width: 2.0),
           ),
-          child: Text(
-            app.description,
-            style: const TextStyle(fontSize: 16),
-          ),
+          child: Text(app.description, style: const TextStyle(fontSize: 16)),
         ),
       ),
     );
@@ -71,14 +74,13 @@ class AppDetailsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(app.name),
-      ),
+      appBar: AppBar(title: Text(app.name)),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 appIcon(),
                 const SizedBox(width: 16.0),
@@ -88,11 +90,9 @@ class AppDetailsScreen extends StatelessWidget {
                   height: 100,
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      appGetButton(),
-                    ],
-                  )
-                )
+                    children: [appGetButton()],
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 64.0),
@@ -102,5 +102,4 @@ class AppDetailsScreen extends StatelessWidget {
       ),
     );
   }
-
 }

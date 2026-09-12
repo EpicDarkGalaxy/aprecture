@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:aprecture/screens/tabs/apps_screen.dart';
 import 'package:aprecture/screens/tabs/search_screen.dart';
+import 'package:aprecture/screens/tabs/settings_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -16,7 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   static const List<Widget> _tabs = [
     AppsScreen(),
     SearchScreen(),
-    Placeholder(),
+    SettingsScreen(),
   ];
 
   @override

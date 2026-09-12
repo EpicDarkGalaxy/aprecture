@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:aprecture/services/providers/fdroid_provider.dart';
 import 'package:aprecture/models/app.dart';
-import 'package:aprecture/services/asset_manager.dart';
+import 'package:aprecture/services/asset_service.dart';
 import 'package:aprecture/screens/app_details_screen.dart';
+import 'package:aprecture/services/app_service.dart';
+
 
 class AppsScreen extends StatefulWidget {
   const AppsScreen({super.key});
@@ -12,12 +13,12 @@ class AppsScreen extends StatefulWidget {
 }
 
 class _AppsScreenState extends State<AppsScreen> {
-  late final Future<List<App>> _apps;
+  final _appService = AppService();
 
   @override
   void initState() {
     super.initState();
-    _apps = FdroidProvider().getApps();
+    _appService.refreshApps();
   }
 
   /// Group apps by their first category
@@ -54,7 +55,7 @@ class _AppsScreenState extends State<AppsScreen> {
                 child: SizedBox(
                   width: 64,
                   height: 64,
-                  child: AssetManager.getIcon(app.iconUrl),
+                  child: AssetService.getIcon(app.iconUrl),
                 ),
               ),
               const SizedBox(height: 8),
@@ -100,18 +101,16 @@ class _AppsScreenState extends State<AppsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Apps")),
-      body: FutureBuilder<List<App>>(
-        future: _apps,
+      body: ListenableBuilder(
+        listenable: _appService,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (_appService.isLoading) {
             return const Center(child: CircularProgressIndicator());
-          } else if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          } else if (_appService.apps.isEmpty) {
             return const Center(child: Text("No apps found"));
           }
 
-          final grouped = _groupByCategory(snapshot.data!);
+          final grouped = _groupByCategory(_appService.apps);
           final categories = grouped.keys.toList()..sort();
 
           // Vertical list of horizontal sections

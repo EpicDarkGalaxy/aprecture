@@ -1,59 +1,36 @@
-import 'package:aprecture/services/asset_manager.dart';
+import 'package:aprecture/services/asset_service.dart';
 import 'package:flutter/material.dart';
 import 'package:aprecture/models/app.dart';
-import 'package:aprecture/services/providers/fdroid_provider.dart';
 import 'package:aprecture/screens/app_details_screen.dart';
+// import 'package:aprecture/services/logger.dart';
+import 'package:aprecture/services/app_service.dart';
+
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
+  @override
   State<SearchScreen> createState() => _SearchScreenState();
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  final List<App> _filteredApps = [];
-  final List<App> _apps = [];
-  bool _loading = true;
+  final _appService = AppService();
+
+  List<App> _filteredApps = [];
   String _query = '';
 
-  @override
-  void initState() {
-    super.initState();
-    _loadApps();
-  }
-
-  Future<void> _loadApps() async {
-    final apps = await FdroidProvider().getApps();
-    if (!mounted) return;
+  void _filterApps() {
     setState(() {
-      _apps.addAll(apps);
-      _loading = false;
+      if (_query.isEmpty) {
+        _filteredApps = [];
+        return;
+      }
+
+      _filteredApps = _appService.searchApps(_query);
     });
   }
 
-  void _filterApps() {
-    if (_query.isNotEmpty) {
-      setState(() {
-        _filteredApps.clear();
-        for (final app in _apps) {
-          final loweredAppName = app.name.toLowerCase();
-          final loweredQuery = _query.toLowerCase();
-          final loweredAppSummary = app.summary.toLowerCase();
-          final loweredCategories = app.categories.map((c) => c.toLowerCase()).toList();
-
-          if (loweredAppName.contains(loweredQuery) || loweredAppSummary.contains(loweredQuery) || loweredCategories.contains(loweredQuery)) {
-            print("Found: ${app.name}");
-            _filteredApps.add(app);
-          }
-        }
-      });
-    }
-  }
-
   Widget _buildSearchResults() {
-    if(_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
     if (_query.isEmpty) {
       return const Center(child: Text("Search for an app"));
     }
@@ -65,7 +42,11 @@ class _SearchScreenState extends State<SearchScreen> {
       itemCount: _filteredApps.length,
       itemBuilder: (context, index) {
         return ListTile(
-          leading: AssetManager.getIcon(_filteredApps[index].iconUrl),
+          leading: SizedBox(
+            width: 48,
+            height: 48,
+            child: AssetService.getIcon(_filteredApps[index].iconUrl),
+          ),
           title: Text(_filteredApps[index].name),
           subtitle: Text(_filteredApps[index].summary),
           onTap: () {
