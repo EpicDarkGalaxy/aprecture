@@ -44,6 +44,29 @@ class FdroidProvider {
     return '';
   }
 
+  List<String> _getScreenshots(Map<String, dynamic> metadata) {
+    try {
+      final screenshotsMap = metadata['screenshots'];
+      if (screenshotsMap is Map) {
+        final phoneMap = screenshotsMap['phone'];
+        if (phoneMap is Map) {
+          // Look for en-US or fallback to first available locale
+          final localeList = phoneMap['en-US'] ?? phoneMap.values.firstOrNull;
+          if (localeList is List) {
+            return localeList
+                .map((item) => item is Map ? item['name']?.toString() : null)
+                .where((name) => name != null && name.isNotEmpty)
+                .map((name) => '$_repoBaseUrl$name')
+                .toList()
+                .cast<String>();
+          }
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+
   String _cleanHtml(String htmlString) {
     if (htmlString.isEmpty) return '';
     final stripped = htmlString.replaceAll(RegExp(r'<[^>]*>'), '');
@@ -85,7 +108,13 @@ class FdroidProvider {
             'description': _cleanHtml(_getLocalized('description', metadata)),
             'categories': (metadata['categories'] as List?) ?? [],
             'iconUrl': _getIconUrl(metadata),
+            'screenshots': _getScreenshots(metadata),
+            'author': metadata["author"]?.toString() ?? 'Unknown Developer',
+            'sourceCode': metadata['sourceCode']?.toString() ?? '',
+            'issueTracker': metadata['issueTracker']?.toString() ?? '',
+            'webSite': metadata['webSite']?.toString() ?? '',
           };
+
         }
         return formattedData;
       } else {

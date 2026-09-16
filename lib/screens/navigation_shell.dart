@@ -4,14 +4,14 @@ import 'package:aprecture/screens/tabs/search_screen.dart';
 import 'package:aprecture/screens/tabs/settings_screen.dart';
 
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class NavigationShell extends StatefulWidget {
+  const NavigationShell({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<NavigationShell> createState() => _NavigationShellState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _NavigationShellState extends State<NavigationShell> {
   int _selectedIndex = 0;
 
   static const List<Widget> _tabs = [

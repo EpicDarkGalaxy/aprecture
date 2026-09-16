@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:aprecture/models/app.dart';
-import 'package:aprecture/services/asset_service.dart';
 import 'package:aprecture/screens/app_details_screen.dart';
 import 'package:aprecture/services/app_service.dart';
 
@@ -55,7 +54,9 @@ class _AppsScreenState extends State<AppsScreen> {
                 child: SizedBox(
                   width: 64,
                   height: 64,
-                  child: AssetService.getIcon(app.iconUrl),
+                  child: Image.network(app.iconUrl, errorBuilder: (context, error, stackTrace) {
+                    return const Icon(Icons.android);
+                  }), // Fallback to default icon
                 ),
               ),
               const SizedBox(height: 8),
@@ -112,15 +113,18 @@ class _AppsScreenState extends State<AppsScreen> {
 
           final grouped = _groupByCategory(_appService.apps);
           final categories = grouped.keys.toList()..sort();
-
-          // Vertical list of horizontal sections
-          return ListView.builder(
-            itemCount: categories.length,
-            itemBuilder: (context, index) {
-              final category = categories[index];
-              return _categorySection(category, grouped[category]!);
-            },
-          );
+          return RefreshIndicator(
+              onRefresh: () async {
+                await _appService.refreshIndex();
+              },
+              child: ListView.builder(
+                itemCount: categories.length,
+                itemBuilder: (context, index) {
+                  final category = categories[index];
+                  return _categorySection(category, grouped[category]!);
+                },
+              ),
+            );
         },
       ),
     );

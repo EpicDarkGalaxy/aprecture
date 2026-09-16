@@ -1,4 +1,3 @@
-import 'package:aprecture/services/asset_service.dart';
 import 'package:flutter/material.dart';
 import 'package:aprecture/models/app.dart';
 import 'package:aprecture/screens/app_details_screen.dart';
@@ -45,7 +44,7 @@ class _SearchScreenState extends State<SearchScreen> {
           leading: SizedBox(
             width: 48,
             height: 48,
-            child: AssetService.getIcon(_filteredApps[index].iconUrl),
+            child: Image.network(_filteredApps[index].iconUrl),
           ),
           title: Text(_filteredApps[index].name),
           subtitle: Text(_filteredApps[index].summary),

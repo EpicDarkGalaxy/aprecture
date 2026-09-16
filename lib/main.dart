@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:aprecture/screens/home_screen.dart';
+import 'package:aprecture/screens/navigation_shell.dart';
 
 void main() {
   runApp(const Aprecture());
@@ -15,7 +15,7 @@ class Aprecture extends StatelessWidget {
       theme: ThemeData(
         primarySwatch: Colors.blue,
       ),
-      home: const HomeScreen(),
+      home: const NavigationShell(),
     );
   }
 }
