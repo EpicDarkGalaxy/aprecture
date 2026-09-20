@@ -25,29 +25,51 @@ class AppDetailsScreen extends StatelessWidget {
     );
   }
 
+  Widget appSources() {
+    return DropdownMenu(
+      initialSelection: app.sources.isNotEmpty ? app.sources.first : null,
+      selectOnly: true,
+      label: const Text('Sources'),
+      dropdownMenuEntries: app.sources
+          .map((source) => DropdownMenuEntry(value: source, label: source))
+          .toList(),
+    );
+  }
+
   Widget appExternalLinks() {
-    if (app.sourceCode.isEmpty && app.issueTracker.isEmpty && app.webSite.isEmpty) {
+    // Test
+    logger.d(
+      "External Links: ${app.sourceCode}, ${app.issueTracker}, ${app.webSite}",
+    );
+
+    if (app.sourceCode.isEmpty &&
+        app.issueTracker.isEmpty &&
+        app.webSite.isEmpty) {
       return const SizedBox.shrink();
     }
 
     return Wrap(
       spacing: 8,
+      runSpacing: 8,
       children: [
-        ActionChip(
-          avatar: const Icon(Icons.code),
-          label: const Text('Source Code'),
-          onPressed: () => launchUrl(Uri.parse(app.sourceCode)),
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.bug_report),
-          label: const Text('Issue Tracker'),
-          onPressed: () => launchUrl(Uri.parse(app.issueTracker)),
-        ),
-        ActionChip(
-          avatar: const Icon(Icons.web),
-          label: const Text('Website'),
-          onPressed: () => launchUrl(Uri.parse(app.webSite)),
-        ),
+        if (app.sourceCode.isNotEmpty)
+          ActionChip(
+            avatar: const Icon(Icons.code),
+            label: const Text('Source Code'),
+            onPressed: () => launchUrl(Uri.parse(app.sourceCode)),
+          ),
+        if (app.issueTracker.isNotEmpty)
+          ActionChip(
+            avatar: const Icon(Icons.bug_report),
+            label: const Text('Issue Tracker'),
+            onPressed: () => launchUrl(Uri.parse(app.issueTracker)),
+          ),
+        if (app.webSite.isNotEmpty)
+          ActionChip(
+            avatar: const Icon(Icons.web),
+            label: const Text('Website'),
+            onPressed: () => launchUrl(Uri.parse(app.webSite)),
+          ),
       ],
     );
   }
@@ -81,7 +103,7 @@ class AppDetailsScreen extends StatelessWidget {
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 16),
-          )
+          ),
         ],
       ),
     );
@@ -130,9 +152,7 @@ class AppDetailsScreen extends StatelessWidget {
                           const Center(child: Icon(Icons.broken_image)),
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
+                        return const Center(child: CircularProgressIndicator());
                       },
                     ),
                   ),
@@ -188,6 +208,10 @@ class AppDetailsScreen extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 16.0),
+            appSources(),
+            const SizedBox(height: 16.0),
+            appExternalLinks(),
             const SizedBox(height: 16.0),
             appScreenshots(),
             const SizedBox(height: 16.0),

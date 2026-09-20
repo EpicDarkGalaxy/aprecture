@@ -1,16 +1,17 @@
 class App {
-  final String name;
-  final String packageName;
-  final String versionName;
-  final String summary;
-  final String description;
-  final String iconUrl;
-  final List<String> categories;
+  final String name; // Display name of the app, e.g., "F-Droid"
+  final String packageName; // Unique package name of the app, e.g., "org.fdroid.fdroid"
+  final String versionName; // Version name of the app, e.g., "1.0.0"
+  final String summary; // Short summary or description of the app
+  final String description; // Description of the app
+  final String iconUrl; // URL to the app's icon
+  final List<String> categories; // List of categories the app belongs to
   final List<String> screenshots;
-  final String author;
-  final String sourceCode;
-  final String issueTracker;
-  final String webSite;
+  final String author; // Developer name
+  final String sourceCode; // URL to the source code repository
+  final String issueTracker; // URL to the issue tracker
+  final String webSite; // URL to the app's website
+  final List<String> sources = <String>[]; // List of sources where the app is available
 
   App({
     required this.name,
@@ -25,12 +26,16 @@ class App {
     required this.sourceCode,
     required this.issueTracker,
     required this.webSite,
-  });
+    required String source,
+  }) {
+    sources.add(source);
+  }
 
   factory App.fromJson({
     required String packageName,
     required Map<String, dynamic> json,
   }) {
+
     return App(
       name: json['name'] ?? 'NONAME',
       packageName: packageName,
@@ -44,6 +49,7 @@ class App {
       sourceCode: json['sourceCode'] ?? '',
       issueTracker: json['issueTracker'] ?? '',
       webSite: json['webSite'] ?? '',
+      source: json['sources'] ?? 'Unknown Source',
     );
   }
 }

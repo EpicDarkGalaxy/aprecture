@@ -4,15 +4,50 @@ import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:aprecture/models/app.dart';
 import 'package:aprecture/services/logger.dart';
-import 'package:aprecture/services/providers/fdroid_provider.dart';
+import 'package:aprecture/services/providers/providers_map.dart';
+import 'package:aprecture/services/providers/app_source.dart';
 import 'package:aprecture/utils/utils.dart' as utils;
 
 class AppService extends ChangeNotifier {
-  AppService._internal();
-  static final AppService _instance = AppService._internal();
+  AppService._internal([
+    List<AppSource>? sources,
+    List<AppSource>? optInSources,
+  ])  : _sources = sources ?? const <AppSource>[],
+        _optInSources = optInSources ?? const <AppSource>[];
+
+  static final AppService _instance = AppService._internal(
+    [...providersMap['Default']!.values],
+    [],
+  );
   factory AppService() => _instance;
 
-  final FdroidProvider _fdroidProvider = FdroidProvider();
+  factory AppService.withConfiguredSources({
+    List<AppSource>? sources,
+    List<AppSource>? optInSources,
+  }) {
+    final safeSources = (sources ?? [...providersMap['Default']!.values])
+        .where((source) => !source.isOptIn)
+        .toList();
+    final enabledOptIn = (optInSources ?? const <AppSource>[])
+        .where((source) => source.isOptIn)
+        .toList();
+
+    return AppService._internal(safeSources, enabledOptIn);
+  }
+
+  factory AppService.withSources(List<AppSource> sources) {
+    return AppService.withConfiguredSources(sources: sources);
+  }
+
+  factory AppService.withOptInSources(List<AppSource> optInSources) {
+    return AppService.withConfiguredSources(
+      sources: [...providersMap['Default']!.values],
+      optInSources: optInSources,
+    );
+  }
+
+  final List<AppSource> _sources;
+  final List<AppSource> _optInSources;
 
   bool _isLoading = false;
   List<App> _apps = [];
@@ -20,8 +55,19 @@ class AppService extends ChangeNotifier {
   bool get isLoading => _isLoading;
   List<App> get apps => _apps;
 
+  List<AppSource> get optInSources => _instance._optInSources;
+
   static File get cacheFile =>
       File("${Directory.systemTemp.path}/apps_cache.json");
+
+  void toggleOptInSource(AppSource source) {
+    if (_optInSources.contains(source)) {
+      _optInSources.remove(source);
+    } else {
+      _optInSources.add(source);
+    }
+    notifyListeners();
+  }
 
   Future<void> clearCache() async {
     if (await cacheFile.exists()) {
@@ -31,8 +77,8 @@ class AppService extends ChangeNotifier {
   }
 
   Future<void> refreshIndex() async {
-    _apps.clear();
-    await clearCache();
+    _apps.clear(); // Clear the current list of apps to avoid showing stale data while refreshing and duplicates after refresh
+    await clearCache(); // Clear the cache to force a fresh fetch from F-Droid
     await refreshApps();
     logger.i("Index refreshed");
   }
@@ -54,33 +100,50 @@ class AppService extends ChangeNotifier {
     return apps;
   }
 
+  Future<Map<String, dynamic>> fetchAppsFromSources() async {
+    final merged = <String, dynamic>{};
+    final sources = <AppSource>[..._sources, ..._optInSources];
+
+    for (final source in sources) {
+      final data = await source.fetchApps();
+      for (final entry in data.entries) {
+        merged.putIfAbsent(entry.key, () => entry.value);
+      }
+    }
+
+    return merged;
+  }
+
   Future<void> refreshApps() async {
     _isLoading = true;
     notifyListeners();
-    if (_apps.isNotEmpty) {
+
+    String packagesJsonString = '';
+    try {
+      if (await cacheFile.exists() && await cacheFile.length() > 0) {
+        packagesJsonString = await cacheFile.readAsString();
+        logger.d('Loaded apps from cache');
+      } else {
+        final appsMap = await fetchAppsFromSources();
+        if (appsMap.isEmpty) {
+          logger.e('No apps fetched from configured sources');
+          _isLoading = false;
+          notifyListeners();
+          return;
+        }
+        await writeAppsToCache(appsMap);
+        packagesJsonString = jsonEncode(appsMap);
+        logger.d('Fetched apps from configured sources and cached them');
+      }
+
+      final List<App> parsedApps = await Isolate.run(() => _parsePackages(packagesJsonString));
+      _apps = parsedApps;
+    } catch (e) {
+      logger.e('Error while refreshing apps: $e');
+    } finally {
       _isLoading = false;
       notifyListeners();
-      return;
     }
-
-    if (await cacheFile.exists()) {
-      logger.i("Cache hit");
-      final cachedApps = await cacheFile.readAsString();
-      _apps = await Isolate.run(() => _parsePackages(cachedApps));
-      logger.d('Loaded ${_apps.length} apps from cache');
-      _isLoading = false;
-      notifyListeners();
-      return;
-    }
-
-    logger.i("Cache miss");
-    final formattedApps = await _fdroidProvider.getApps();
-    await writeAppsToCache(formattedApps);
-
-    final formattedAppsJson = jsonEncode(formattedApps);
-    _apps = await Isolate.run(() => _parsePackages(formattedAppsJson));
-    _isLoading = false;
-    notifyListeners();
   }
 
   List<App> searchApps(String query) {
@@ -98,9 +161,9 @@ class AppService extends ChangeNotifier {
             categories.contains(term)) {
           return true;
         }
-        return utils.fuzzyMatch(name, term, 0.8) || // 80%
-            utils.fuzzyMatch(summary, term, 0.6) || // 60%
-            utils.fuzzyMatch(categories, term, 0.7); // 70%
+        return utils.fuzzyMatch(name, term, 0.8); // 60%
+            // utils.fuzzyMatch(summary, term, 0.6) || // 40%
+            // utils.fuzzyMatch(categories, term, 0.7); // 30%
       });
     }).toList();
     return results;

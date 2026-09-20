@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:aprecture/models/app.dart';
 import 'package:aprecture/screens/app_details_screen.dart';
 import 'package:aprecture/services/app_service.dart';
-
+import 'package:aprecture/widgets/skeletons/app_list_skeleton.dart';
 
 class AppsScreen extends StatefulWidget {
   const AppsScreen({super.key});
@@ -17,7 +17,7 @@ class _AppsScreenState extends State<AppsScreen> {
   @override
   void initState() {
     super.initState();
-    _appService.refreshApps();
+    _appService.refreshApps(); // Refresh apps when the screen is first loaded with cached data if available, otherwise fetch from F-Droid
   }
 
   /// Group apps by their first category
@@ -106,17 +106,41 @@ class _AppsScreenState extends State<AppsScreen> {
         listenable: _appService,
         builder: (context, snapshot) {
           if (_appService.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+            return ListView.builder(itemBuilder: (context, index) {
+              if (index % 2 == 0) {
+                return const AppListSkeleton();
+              } else {
+                return const SizedBox(height: 16);
+              }
+            });
           } else if (_appService.apps.isEmpty) {
-            return const Center(child: Text("No apps found"));
+            return SizedBox(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    const Text(
+                      "Failed to load apps. \nPlease check your internet connection or try refreshing.",
+                      style: TextStyle(fontSize: 18, color: Colors.grey),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: _appService.refreshIndex,
+                      child: const Text("Refresh"),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           final grouped = _groupByCategory(_appService.apps);
           final categories = grouped.keys.toList()..sort();
           return RefreshIndicator(
-              onRefresh: () async {
-                await _appService.refreshIndex();
-              },
+              onRefresh: _appService.refreshIndex, // on pull down, force refresh apps
               child: ListView.builder(
                 itemCount: categories.length,
                 itemBuilder: (context, index) {

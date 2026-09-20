@@ -119,3 +119,6 @@ app.*.symbols
 !/dev/ci/**/Gemfile.lock
 
 .idea
+# Widget Preview related
+.widget_preview/
+.idea/workspace.xml

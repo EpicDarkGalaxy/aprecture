@@ -44,7 +44,9 @@ class _SearchScreenState extends State<SearchScreen> {
           leading: SizedBox(
             width: 48,
             height: 48,
-            child: Image.network(_filteredApps[index].iconUrl),
+            child: Image.network(_filteredApps[index].iconUrl, errorBuilder: (context, error, stackTrace) {
+              return const Icon(Icons.android);
+            }),
           ),
           title: Text(_filteredApps[index].name),
           subtitle: Text(_filteredApps[index].summary),

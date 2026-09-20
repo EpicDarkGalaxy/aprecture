@@ -1,29 +1,31 @@
 import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:aprecture/services/logger.dart';
 import 'package:aprecture/services/providers/app_source.dart';
-import 'package:http/http.dart' as http;
 
-class FdroidProvider extends AppSource {
-  final http.Client _httpClient = http.Client();
+class IzzyOnDroidProvider extends AppSource {
+  IzzyOnDroidProvider({http.Client? httpClient})
+      : _httpClient = httpClient ?? http.Client();
+
+  final http.Client _httpClient;
 
   @override
-  String get sourceName => 'F-Droid';
+  String get sourceName => 'IzzyOnDroid';
 
-  static const String _repoBaseUrl = 'https://f-droid.org/repo';
-  /// Retrieves the localized value for a given key from the metadata,
-  /// e.g. {'name': {'en-US': 'App Name'}}.
-  /// If the key is not found, it returns an empty string.
+  static const String _fingerprint =
+      '3BF0D6ABFEAE2F401707B6D966BE743BF0EEE49C2561B9BA39073711F628937A';
+  static const String _repoBaseUrl = 'https://apt.izzysoft.de/fdroid/repo';
+  static const String _indexUrl = '$_repoBaseUrl/index-v2.json?fingerprint=$_fingerprint';
+
   String _getLocalized(String key, Map<String, dynamic> metadata) {
     final localized = metadata[key];
     if (localized is Map<String, dynamic>) {
-      // F-Droid uses 'en-US' with a hyphen!
       final value = localized['en-US'] ?? localized.values.firstOrNull;
       return value is String ? value : '';
     }
     return localized?.toString() ?? '';
   }
 
-  // Icon in v2 is an object: {en-US: {name: "/pkg/icon.png", sha256: ..., size: ...}}
   String _getIconUrl(Map<String, dynamic> metadata) {
     final icon = metadata['icon'];
     if (icon is Map<String, dynamic>) {
@@ -35,7 +37,6 @@ class FdroidProvider extends AppSource {
     return '';
   }
 
-  // versionName lives in versions -> <hash> -> manifest -> versionName
   String _getVersionName(dynamic pkgData) {
     final versions = pkgData['versions'];
     if (versions is Map && versions.isNotEmpty) {
@@ -56,7 +57,6 @@ class FdroidProvider extends AppSource {
       if (screenshotsMap is Map) {
         final phoneMap = screenshotsMap['phone'];
         if (phoneMap is Map) {
-          // Look for en-US or fallback to first available locale
           final localeList = phoneMap['en-US'] ?? phoneMap.values.firstOrNull;
           if (localeList is List) {
             return localeList
@@ -69,9 +69,8 @@ class FdroidProvider extends AppSource {
         }
       }
     } catch (_) {}
-    return [];
+    return const [];
   }
-
 
   String _cleanHtml(String htmlString) {
     if (htmlString.isEmpty) return '';
@@ -89,48 +88,55 @@ class FdroidProvider extends AppSource {
   @override
   Future<Map<String, dynamic>> fetchApps() async {
     try {
-      logger.d('Fetching apps from F-Droid...');
-
-      final response = await _httpClient.get(
-        Uri.parse('https://f-droid.org/repo/index-v2.json'),
-      );
+      logger.d('Fetching apps from IzzyOnDroid...');
+      final response = await _httpClient.get(Uri.parse(_indexUrl));
 
       logger.d('Response CODE: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final rawPackages = data['packages'];
+        final formattedData = <String, dynamic>{};
 
-        // Format data before writing to cache
-        final rawPackages = data['packages'] as Map<String, dynamic>;
-        final Map<String, dynamic> formattedData = {};
+        if (rawPackages is! Map) {
+          logger.e('Unexpected package index format from IzzyOnDroid');
+          return {};
+        }
 
         for (final package in rawPackages.entries) {
-          final packageName = package.key;
+          final packageName = package.key.toString();
           final pkgData = package.value;
-          final metadata = pkgData['metadata'] as Map<String, dynamic>;
+          if (pkgData is! Map) continue;
+          final metadataMap = pkgData['metadata'];
+          if (metadataMap is! Map) continue;
+
+          final metadata = Map<String, dynamic>.from(metadataMap);
+          final pkg = Map<String, dynamic>.from(pkgData);
+
           formattedData[packageName] = {
             'name': _getLocalized('name', metadata),
-            'versionName': _getVersionName(pkgData),
+            'versionName': _getVersionName(pkg),
             'summary': _cleanHtml(_getLocalized('summary', metadata)),
             'description': _cleanHtml(_getLocalized('description', metadata)),
-            'categories': (metadata['categories'] as List?) ?? [],
+            'categories': (metadata['categories'] as List?) ?? const [],
             'iconUrl': _getIconUrl(metadata),
             'screenshots': _getScreenshots(metadata),
-            'author': metadata["authorName"]?.toString() ?? 'Unknown Developer',
+            'author': metadata['authorName']?.toString() ?? 'Unknown Developer',
             'sourceCode': metadata['sourceCode']?.toString() ?? '',
             'issueTracker': metadata['issueTracker']?.toString() ?? '',
             'webSite': metadata['webSite']?.toString() ?? '',
-            'sources': sourceName, // Add the source name to the sources list
+            'sources': sourceName,
           };
-
         }
+
+        logger.d('Parsed ${formattedData.length} apps from IzzyOnDroid');
         return formattedData;
-      } else {
-        logger.e('Failed to fetch apps from F-Droid: ${response.statusCode}');
-        return {};
       }
+
+      logger.e('Failed to fetch apps from IzzyOnDroid. Status code: ${response.statusCode}');
+      return {};
     } catch (e, stackTrace) {
-      logger.e('Error fetching apps from F-Droid: $e', stackTrace: stackTrace);
+      logger.e('Error fetching apps from IzzyOnDroid: $e', stackTrace: stackTrace);
       return {};
     }
   }
