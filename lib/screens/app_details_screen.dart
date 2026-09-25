@@ -1,12 +1,27 @@
 import 'package:aprecture/models/app.dart';
+import 'package:aprecture/services/download_service.dart';
+import 'package:aprecture/services/app_service.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:aprecture/services/logger.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class AppDetailsScreen extends StatelessWidget {
-  final App app;
+class AppDetailsScreen extends StatefulWidget {
+  final App _app;
 
-  const AppDetailsScreen({super.key, required this.app});
+  const AppDetailsScreen({super.key, required this._app});
+
+  @override
+  State<AppDetailsScreen> createState() => _AppDetailsSreenState();
+}
+
+class _AppDetailsSreenState extends State<AppDetailsScreen> {
+  final DownloadService _downloadService = DownloadService();
+  final AppService _appService = AppService();
+  App get app => widget._app;
+
+  String _selectedSource = '';
+  bool _descriptionExpanded = false;
 
   Widget appIcon() {
     return SizedBox(
@@ -27,12 +42,16 @@ class AppDetailsScreen extends StatelessWidget {
 
   Widget appSources() {
     return DropdownMenu(
-      initialSelection: app.sources.isNotEmpty ? app.sources.first : null,
+      initialSelection: app.sourceNames.isNotEmpty
+          ? app.sourceNames.keys.first
+          : null,
       selectOnly: true,
       label: const Text('Sources'),
-      dropdownMenuEntries: app.sources
-          .map((source) => DropdownMenuEntry(value: source, label: source))
-          .toList(),
+      dropdownMenuEntries: app.sourceNames.keys.map((source) {
+        _selectedSource = source;
+        logger.d("Selected Source: $_selectedSource");
+        return DropdownMenuEntry(value: source, label: source);
+      }).toList(),
     );
   }
 
@@ -111,10 +130,56 @@ class AppDetailsScreen extends StatelessWidget {
 
   Widget appGetButton() {
     return ElevatedButton(
-      onPressed: () {
-        logger.d("INSTALLING");
+      onPressed: () => _downloadService.downloadApp(
+        url: app.downloadUrl(_selectedSource),
+        packageName: app.packageName,
+      ),
+      child: Text("Get"),
+    );
+  }
+
+  Widget appInstallButton() {
+    return ElevatedButton(
+      onPressed: () => _appService.installApp(
+        _downloadService.getFilePath(app.packageName)!,
+      ),
+      child: Text("Install"),
+    );
+  }
+
+  Widget appOpenButton() {
+    return ElevatedButton(
+      onPressed: () => _appService.openApp(app.packageName),
+      child: Text("Open"),
+    );
+  }
+
+  // Widget appUninstallButton() {
+  //   return ElevatedButton(
+  //     onPressed: () => _appService.uninstallApp(app.packageName),
+  //     child: Text("Uninstall"),
+  //   );
+  // }
+
+  Widget appDownloadProgress() {
+    return ListenableBuilder(
+      listenable: _downloadService,
+      builder: (context, child) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox(
+              child: CircularProgressIndicator(
+                value: _downloadService.getProgress(app.packageName),
+              ),
+            ),
+            Text(
+              '${(_downloadService.getProgress(app.packageName) * 100).round()}%',
+              style: const TextStyle(color: Colors.black),
+            ),
+          ],
+        );
       },
-      child: const Text('Get'),
     );
   }
 
@@ -166,20 +231,61 @@ class AppDetailsScreen extends StatelessWidget {
   }
 
   Widget appDescription() {
-    return ExpansionTile(
-      title: const Text('Description'),
-      children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16.0),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(16.0),
-            border: Border.all(color: Colors.grey.shade400, width: 2.0),
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _descriptionExpanded = !_descriptionExpanded;
+        });
+      },
+      child: Stack(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            width: double.infinity,
+            padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(16.0),
+              border: Border.all(color: Colors.grey.shade400, width: 2.0),
+            ),
+            child: Column(
+              children: [
+                Text(
+                  app.description,
+                  style: const TextStyle(fontSize: 16),
+                  maxLines: _descriptionExpanded ? null : 3,
+                  overflow: _descriptionExpanded
+                      ? TextOverflow.visible
+                      : TextOverflow.ellipsis,
+                ),
+                HtmlWidget(
+                  app.description,
+                  textStyle: const TextStyle(fontSize: 16),
+                ),
+              ],
+            ),
           ),
-          child: Text(app.description, style: const TextStyle(fontSize: 16)),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  Widget buildDownloadActionButton() {
+    return FutureBuilder<bool>(
+      future: _appService.isAppInstalled(app.packageName),
+      builder: (context, snapshot) {
+        if (snapshot.hasData && snapshot.data!) {
+          return appOpenButton();
+        }
+        if (_downloadService.isDownloading(app.packageName) &&
+            !_downloadService.isCompleted(app.packageName)) {
+          return appDownloadProgress();
+        }
+        if (_downloadService.isCompleted(app.packageName)) {
+          return appInstallButton();
+        }
+        return appGetButton();
+      },
     );
   }
 
@@ -201,9 +307,14 @@ class AppDetailsScreen extends StatelessWidget {
                 const SizedBox(width: 16.0),
                 SizedBox(
                   height: 100,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [appGetButton()],
+                  child: ListenableBuilder(
+                    listenable: _downloadService,
+                    builder: (context, child) {
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [buildDownloadActionButton()],
+                      );
+                    },
                   ),
                 ),
               ],

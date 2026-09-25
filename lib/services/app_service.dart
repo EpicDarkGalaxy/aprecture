@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 import 'package:flutter/foundation.dart';
+import 'package:open_filex/open_filex.dart';
+import 'package:installed_apps/installed_apps.dart';
 import 'package:aprecture/models/app.dart';
 import 'package:aprecture/services/logger.dart';
 import 'package:aprecture/services/providers/providers_map.dart';
@@ -12,13 +14,12 @@ class AppService extends ChangeNotifier {
   AppService._internal([
     List<AppSource>? sources,
     List<AppSource>? optInSources,
-  ])  : _sources = sources ?? const <AppSource>[],
-        _optInSources = optInSources ?? const <AppSource>[];
+  ]) : _sources = sources ?? const <AppSource>[],
+       _optInSources = optInSources ?? const <AppSource>[];
 
-  static final AppService _instance = AppService._internal(
-    [...providersMap['Default']!.values],
-    [],
-  );
+  static final AppService _instance = AppService._internal([
+    ...providersMap['Default']!.values,
+  ], []);
   factory AppService() => _instance;
 
   factory AppService.withConfiguredSources({
@@ -46,10 +47,11 @@ class AppService extends ChangeNotifier {
     );
   }
 
-  final List<AppSource> _sources;
-  final List<AppSource> _optInSources;
+  final List<AppSource> _sources; // List of sources for the app service
+  final List<AppSource>
+  _optInSources; // List of opt-in sources for the app service
 
-  bool _isLoading = false;
+  bool _isLoading = false; // Whether the app service is currently loading apps
   List<App> _apps = [];
 
   bool get isLoading => _isLoading;
@@ -77,7 +79,8 @@ class AppService extends ChangeNotifier {
   }
 
   Future<void> refreshIndex() async {
-    _apps.clear(); // Clear the current list of apps to avoid showing stale data while refreshing and duplicates after refresh
+    _apps
+        .clear(); // Clear the current list of apps to avoid showing stale data while refreshing and duplicates after refresh
     await clearCache(); // Clear the cache to force a fresh fetch from F-Droid
     await refreshApps();
     logger.i("Index refreshed");
@@ -88,7 +91,34 @@ class AppService extends ChangeNotifier {
     await cacheFile.writeAsString(json);
   }
 
+  Future<bool> isAppInstalled(String packageName) async {
+    return await InstalledApps.isAppInstalled(packageName) ?? false;
+  }
+
+  Future<void> installApp(String appPath) async {
+    final result = await OpenFilex.open(appPath);
+    if (result.type != ResultType.done) {
+      logger.e('Failed to install app: ${result.message}');
+      return;
+    }
+    logger.i('App installed successfully');
+  }
+
+  // Future<void> uninstallApp(String packageName) async {
+  //   final result = await OpenFilex.open('package:$packageName');
+  //   if (result.type != ResultType.done) {
+  //     logger.e('Failed to uninstall app: ${result.message}');
+  //     return;
+  //   }
+  //   logger.i('App uninstalled successfully');
+  // }
+
+  Future<bool> openApp(String packageName) async {
+    return await InstalledApps.startApp(packageName) ?? false;
+  }
+
   static List<App> _parsePackages(String packagesJsonString) {
+    // Convert the JSON string to a map and then to a list of App objects
     logger.d('Wrapping packages into a list of App objects...');
     final Map<String, dynamic> packages = jsonDecode(packagesJsonString);
     final List<App> apps = [];
@@ -101,6 +131,7 @@ class AppService extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> fetchAppsFromSources() async {
+    // Fetch apps from all sources and merge them into a single map
     final merged = <String, dynamic>{};
     final sources = <AppSource>[..._sources, ..._optInSources];
 
@@ -115,6 +146,7 @@ class AppService extends ChangeNotifier {
   }
 
   Future<void> refreshApps() async {
+    // Refresh apps by fetching from sources and caching the result
     _isLoading = true;
     notifyListeners();
 
@@ -136,7 +168,9 @@ class AppService extends ChangeNotifier {
         logger.d('Fetched apps from configured sources and cached them');
       }
 
-      final List<App> parsedApps = await Isolate.run(() => _parsePackages(packagesJsonString));
+      final List<App> parsedApps = await Isolate.run(
+        () => _parsePackages(packagesJsonString),
+      );
       _apps = parsedApps;
     } catch (e) {
       logger.e('Error while refreshing apps: $e');
@@ -162,8 +196,8 @@ class AppService extends ChangeNotifier {
           return true;
         }
         return utils.fuzzyMatch(name, term, 0.8); // 60%
-            // utils.fuzzyMatch(summary, term, 0.6) || // 40%
-            // utils.fuzzyMatch(categories, term, 0.7); // 30%
+        // utils.fuzzyMatch(summary, term, 0.6) || // 40%
+        // utils.fuzzyMatch(categories, term, 0.7); // 30%
       });
     }).toList();
     return results;

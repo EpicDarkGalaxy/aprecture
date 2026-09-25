@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:aprecture/services/logger.dart';
 import 'package:aprecture/services/providers/app_source.dart';
+import 'package:aprecture/utils/utils.dart';
 import 'package:http/http.dart' as http;
 
 class FdroidProvider extends AppSource {
@@ -10,6 +11,7 @@ class FdroidProvider extends AppSource {
   String get sourceName => 'F-Droid';
 
   static const String _repoBaseUrl = 'https://f-droid.org/repo';
+
   /// Retrieves the localized value for a given key from the metadata,
   /// e.g. {'name': {'en-US': 'App Name'}}.
   /// If the key is not found, it returns an empty string.
@@ -72,7 +74,6 @@ class FdroidProvider extends AppSource {
     return [];
   }
 
-
   String _cleanHtml(String htmlString) {
     if (htmlString.isEmpty) return '';
     final stripped = htmlString.replaceAll(RegExp(r'<[^>]*>'), '');
@@ -108,21 +109,51 @@ class FdroidProvider extends AppSource {
           final packageName = package.key;
           final pkgData = package.value;
           final metadata = pkgData['metadata'] as Map<String, dynamic>;
-          formattedData[packageName] = {
-            'name': _getLocalized('name', metadata),
-            'versionName': _getVersionName(pkgData),
-            'summary': _cleanHtml(_getLocalized('summary', metadata)),
-            'description': _cleanHtml(_getLocalized('description', metadata)),
-            'categories': (metadata['categories'] as List?) ?? [],
-            'iconUrl': _getIconUrl(metadata),
-            'screenshots': _getScreenshots(metadata),
-            'author': metadata["authorName"]?.toString() ?? 'Unknown Developer',
-            'sourceCode': metadata['sourceCode']?.toString() ?? '',
-            'issueTracker': metadata['issueTracker']?.toString() ?? '',
-            'webSite': metadata['webSite']?.toString() ?? '',
-            'sources': sourceName, // Add the source name to the sources list
-          };
 
+          final name = _getLocalized('name', metadata);
+          final versionName = _getVersionName(pkgData);
+          final summary = _cleanHtml(_getLocalized('summary', metadata));
+          final description = _getLocalized('description', metadata);
+          final categories = (metadata['categories'] as List?) ?? [];
+          final iconUrl = _getIconUrl(metadata);
+          final screenshots = _getScreenshots(metadata);
+          final author =
+              metadata["authorName"]?.toString() ?? 'Unknown Developer';
+          final sourceCode = metadata['sourceCode']?.toString() ?? '';
+          final issueTracker = metadata['issueTracker']?.toString() ?? '';
+          final webSite = metadata['webSite']?.toString() ?? '';
+          final sourceName =
+              this.sourceName; // Add the source name to the sources list
+
+          String apkDownloadUrl = '';
+          final versions = pkgData['versions'];
+          if (versions is Map) {
+            for (final versionEntry in versions.values) {
+              if (versionEntry is Map && versionEntry['file'] is Map) {
+                final fileName = versionEntry['file']['name']?.toString();
+                if (fileName != null && fileName.isNotEmpty) {
+                  apkDownloadUrl = '$_repoBaseUrl$fileName';
+                  break;
+                }
+              }
+            }
+          }
+          formattedData[packageName] = formatAppData(
+            name: name,
+            packageName: packageName,
+            versionName: versionName,
+            summary: summary,
+            description: description,
+            categories: categories.cast<String>(),
+            iconUrl: iconUrl,
+            screenshots: screenshots,
+            author: author,
+            sourceCode: sourceCode,
+            issueTracker: issueTracker,
+            webSite: webSite,
+            sourceName: sourceName,
+            apkDownloadUrl: apkDownloadUrl,
+          );
         }
         return formattedData;
       } else {

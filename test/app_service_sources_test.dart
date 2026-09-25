@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:aprecture/models/app.dart';
 import 'package:aprecture/services/app_service.dart';
+import 'package:aprecture/services/download_service.dart';
 import 'package:aprecture/services/providers/apkmirror_provider.dart';
 import 'package:aprecture/services/providers/app_source.dart';
 import 'package:aprecture/services/providers/izzy_on_droid_provider.dart';
@@ -137,5 +139,102 @@ void main() {
       expect(data['com.example.demo']['name'], 'Demo App');
       expect(data['com.example.demo']['versionName'], '1.2.3');
     });
+
+    test('builds a concrete install URL for the Get action', () {
+      final app = App.fromJson(
+        packageName: 'org.fdroid.fdroid',
+        json: {
+          'name': 'F-Droid',
+          'summary': 'F-Droid app',
+          'description': 'desc',
+          'iconUrl': '',
+          'categories': ['Tools'],
+          'screenshots': [],
+          'author': 'F-Droid',
+          'sourceCode': '',
+          'issueTracker': '',
+          'webSite': '',
+          'sourceName': 'F-Droid',
+        },
+      );
+
+      final uri = app.installUri;
+
+      expect(uri, isNotNull);
+      expect(uri!.scheme, 'https');
+      expect(uri.host, 'f-droid.org');
+      expect(uri.path, '/packages/org.fdroid.fdroid/');
+    });
+
+    test('treats a package page as an invalid APK download URL', () {
+      final app = App.fromJson(
+        packageName: 'ai.agent1c.hitomi.open',
+        json: {
+          'name': 'Hitomi',
+          'summary': 'A demo app',
+          'description': 'desc',
+          'iconUrl': '',
+          'categories': ['Tools'],
+          'screenshots': [],
+          'author': 'Hitomi',
+          'sourceCode': '',
+          'issueTracker': '',
+          'webSite': '',
+          'apkDownloadUrl': 'https://f-droid.org/packages/ai.agent1c.hitomi.open/',
+          'sourceName': 'F-Droid',
+        },
+      );
+
+      expect(app.downloadUri, isNull);
+      expect(app.installUri, isNotNull);
+    });
+
+    test('marks the app as downloading before the HTTP response settles', () async {
+      final client = DelayedDownloadHttpClient();
+      final service = DownloadService(httpClient: client);
+
+      final future = service.downloadApp('https://example.com/demo.apk', 'com.example.demo');
+
+      expect(service.isDownloading('com.example.demo'), isTrue);
+
+      final savedPath = await future;
+      expect(savedPath, isNotNull);
+      expect(service.isDownloading('com.example.demo'), isFalse);
+    });
+
+    test('downloads an APK payload to a writable file', () async {
+      final client = FakeDownloadHttpClient();
+      final service = DownloadService(httpClient: client);
+
+      final savedPath = await service.downloadApp('https://example.com/demo.apk');
+
+      expect(savedPath, isNotNull);
+      expect(File(savedPath!).existsSync(), isTrue);
+      expect(File(savedPath).readAsBytesSync(), equals([1, 2, 3, 4]));
+    });
   });
+}
+
+class DelayedDownloadHttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    return http.StreamedResponse(
+      Stream.value([1, 2, 3, 4]),
+      200,
+      request: request,
+    );
+  }
+}
+
+class FakeDownloadHttpClient extends http.BaseClient {
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    final payload = [1, 2, 3, 4];
+    return http.StreamedResponse(
+      Stream.value(payload),
+      200,
+      request: request,
+    );
+  }
 }

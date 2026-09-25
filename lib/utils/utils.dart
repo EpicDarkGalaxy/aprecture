@@ -31,3 +31,50 @@ double similarity(String s1, String s2) {
   }
   return matches / length;
 }
+
+Map<String, dynamic> formatAppData({
+  String name = 'Unknown',
+  String packageName = 'Unknown',
+  String versionName = 'Unknown',
+  String author = 'Unknown',
+  String description = 'No description',
+  String summary = '',
+  String iconUrl = '',
+  String sourceCode = '',
+  String issueTracker = '',
+  String sourceName = '',
+  String webSite = '',
+  String apkDownloadUrl = '',
+  List<String> categories = const [],
+  List<String> screenshots = const [],
+}) {
+  final safeName = name.trim().isEmpty ? 'Unknown' : name.trim();
+  final safePackageName =
+      packageName.trim().isEmpty ? 'Unknown' : packageName.trim();
+  final safeVersionName =
+      versionName.trim().isEmpty ? 'Unknown' : versionName.trim();
+
+  final normalizedAuthor = author.trim().isEmpty
+      ? 'Unknown'
+      : (Uri.tryParse(author.trim()) != null &&
+                  author.trim().startsWith(RegExp(r'https?://', caseSensitive: false))
+              ? 'Active Developer'
+              : author.trim());
+
+  return {
+    'name': safeName,
+    'packageName': safePackageName,
+    'categories': categories,
+    'author': normalizedAuthor,
+    'description': description.trim().isEmpty ? 'No description' : description,
+    'summary': summary,
+    'iconUrl': iconUrl,
+    'versionName': safeVersionName,
+    'screenshots': screenshots,
+    'sourceCode': sourceCode,
+    'issueTracker': issueTracker,
+    'sourceName': sourceName,
+    'webSite': webSite,
+    'apkDownloadUrl': apkDownloadUrl,
+  };
+}

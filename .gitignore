@@ -122,3 +122,4 @@ app.*.symbols
 # Widget Preview related
 .widget_preview/
 .idea/workspace.xml
+.idea/workspace.xml

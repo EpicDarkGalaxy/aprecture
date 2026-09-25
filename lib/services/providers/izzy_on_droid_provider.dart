@@ -113,6 +113,20 @@ class IzzyOnDroidProvider extends AppSource {
           final metadata = Map<String, dynamic>.from(metadataMap);
           final pkg = Map<String, dynamic>.from(pkgData);
 
+          String apkDownloadUrl = '';
+          final versions = pkg['versions'];
+          if (versions is Map) {
+            for (final versionEntry in versions.values) {
+              if (versionEntry is Map && versionEntry['file'] is Map) {
+                final fileName = versionEntry['file']['name']?.toString();
+                if (fileName != null && fileName.isNotEmpty) {
+                  apkDownloadUrl = '$_repoBaseUrl$fileName';
+                  break;
+                }
+              }
+            }
+          }
+
           formattedData[packageName] = {
             'name': _getLocalized('name', metadata),
             'versionName': _getVersionName(pkg),
@@ -125,7 +139,8 @@ class IzzyOnDroidProvider extends AppSource {
             'sourceCode': metadata['sourceCode']?.toString() ?? '',
             'issueTracker': metadata['issueTracker']?.toString() ?? '',
             'webSite': metadata['webSite']?.toString() ?? '',
-            'sources': sourceName,
+            'apkDownloadUrl': apkDownloadUrl,
+            'sourceName': sourceName,
           };
         }
 
