@@ -1,3 +1,6 @@
+# Aprecture
+Aprecture is an Android app that lets you browse, search, and install apps from multiple sources.
+
 # Current State
 - As of right now, it supports the F-Droid and IzzyOnDroid providers.
 - The next planned provider is APK Mirror.
