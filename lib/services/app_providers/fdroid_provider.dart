@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:aprecture/services/logger.dart';
-import 'package:aprecture/services/providers/app_source.dart';
+import 'package:aprecture/services/app_providers/app_source_abstract.dart';
 import 'package:aprecture/utils/utils.dart';
 import 'package:http/http.dart' as http;
 
@@ -74,19 +74,6 @@ class FdroidProvider extends AppSource {
     return [];
   }
 
-  String _cleanHtml(String htmlString) {
-    if (htmlString.isEmpty) return '';
-    final stripped = htmlString.replaceAll(RegExp(r'<[^>]*>'), '');
-    return stripped
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&nbsp;', ' ')
-        .trim();
-  }
-
   @override
   Future<Map<String, dynamic>> fetchApps() async {
     try {
@@ -112,8 +99,8 @@ class FdroidProvider extends AppSource {
 
           final name = _getLocalized('name', metadata);
           final versionName = _getVersionName(pkgData);
-          final summary = _cleanHtml(_getLocalized('summary', metadata));
-          final description = _getLocalized('description', metadata);
+          final summary = _getLocalized('summary', metadata);
+          final description = cleanHtml(_getLocalized('description', metadata));
           final categories = (metadata['categories'] as List?) ?? [];
           final iconUrl = _getIconUrl(metadata);
           final screenshots = _getScreenshots(metadata);

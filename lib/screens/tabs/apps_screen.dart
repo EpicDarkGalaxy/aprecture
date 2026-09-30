@@ -1,155 +1,199 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:aprecture/widgets/apps_list_item.dart';
+import 'package:aprecture/widgets/hero_app_card.dart';
 import 'package:aprecture/models/app.dart';
-import 'package:aprecture/screens/app_details_screen.dart';
+import 'package:go_router/go_router.dart';
 import 'package:aprecture/services/app_service.dart';
-import 'package:aprecture/widgets/skeletons/app_list_skeleton.dart';
+import 'package:aprecture/widgets/skeletons/apps_screen_skeleton.dart';
+import 'package:aprecture/services/logger.dart';
 
-class AppsScreen extends StatefulWidget {
+// Helper sealed class to represent item types in the flattened list
+sealed class AppListItemType {}
+
+class CategoryHeaderItem extends AppListItemType {
+  final String title;
+  final int count;
+  CategoryHeaderItem(this.title, this.count);
+}
+
+class SingleAppItem extends AppListItemType {
+  final App app;
+  SingleAppItem(this.app);
+}
+
+class AppsScreen extends ConsumerStatefulWidget {
   const AppsScreen({super.key});
 
   @override
-  State<AppsScreen> createState() => _AppsScreenState();
+  ConsumerState<AppsScreen> createState() => _AppsScreenState();
 }
 
-class _AppsScreenState extends State<AppsScreen> {
-  final _appService = AppService();
-
+class _AppsScreenState extends ConsumerState<AppsScreen> {
   @override
   void initState() {
     super.initState();
-    _appService.refreshApps(); // Refresh apps when the screen is first loaded with cached data if available, otherwise fetch from F-Droid
-  }
-
-  /// Group apps by their first category
-  Map<String, List<App>> _groupByCategory(List<App> apps) {
-    final Map<String, List<App>> grouped = {};
-    for (final app in apps) {
-      final category = app.categories.isNotEmpty ? app.categories.first : 'Other';
-      grouped.putIfAbsent(category, () => []).add(app);
-    }
-    return grouped;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(appServiceProvider.notifier).refreshApps();
+    });
   }
 
   void _openApp(App app) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => AppDetailsScreen(app: app)),
-    );
+    context.push('/app-details/${app.appId}');
   }
 
-  /// One app card inside a horizontal carousel
-  Widget _appCard(App app) {
-    return SizedBox(
-      width: 110,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => _openApp(app),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: SizedBox(
-                  width: 64,
-                  height: 64,
-                  child: Image.network(app.iconUrl, errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.android);
-                  }), // Fallback to default icon
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                app.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// A titled section with a horizontal carousel
-  Widget _categorySection(String title, List<App> apps) {
+  Widget _buildHeroSection(List<App> randomApps) {
+    if (randomApps.isEmpty) {
+      logger.d('Random apps is empty');
+      return const SizedBox.shrink();
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text(
-            title,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            'Random Apps',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ),
         SizedBox(
-          height: 140,
+          height: 200,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: apps.length,
-            itemBuilder: (context, index) => _appCard(apps[index]),
+            itemCount: randomApps.length,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            itemBuilder: (context, index) {
+              final app = randomApps[index];
+              return Padding(
+                padding: const EdgeInsets.only(right: 12),
+                child: HeroAppCard(app: app, onTap: () => _openApp(app)),
+              );
+            },
           ),
         ),
+        const SizedBox(height: 16),
       ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Apps")),
-      body: ListenableBuilder(
-        listenable: _appService,
-        builder: (context, snapshot) {
-          if (_appService.isLoading) {
-            return ListView.builder(itemBuilder: (context, index) {
-              if (index % 2 == 0) {
-                return const AppListSkeleton();
-              } else {
-                return const SizedBox(height: 16);
-              }
-            });
-          } else if (_appService.apps.isEmpty) {
-            return SizedBox(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 64, color: Colors.grey),
-                    const SizedBox(height: 16),
-                    const Text(
-                      "Failed to load apps. \nPlease check your internet connection or try refreshing.",
-                      style: TextStyle(fontSize: 18, color: Colors.grey),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: _appService.refreshIndex,
-                      child: const Text("Refresh"),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
+    final isLoading = ref.watch(appServiceProvider).isLoading;
+    final randomApps = ref.watch(appServiceProvider).randomApps;
+    final groupedApps = ref.watch(appServiceProvider).groupedApps;
+    final categories = ref.watch(appServiceProvider).categories;
 
-          final grouped = _groupByCategory(_appService.apps);
-          final categories = grouped.keys.toList()..sort();
-          return RefreshIndicator(
-              onRefresh: _appService.refreshIndex, // on pull down, force refresh apps
-              child: ListView.builder(
-                itemCount: categories.length,
-                itemBuilder: (context, index) {
-                  final category = categories[index];
-                  return _categorySection(category, grouped[category]!);
-                },
+    if (isLoading) return const AppsScreenSkeleton();
+
+    if (groupedApps.isEmpty) {
+      return Scaffold(
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await ref.read(appServiceProvider.notifier).refreshApps();
+          },
+          child: Center(
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text(
+                    "Failed to load apps. \nPlease check your internet connection or try refreshing.",
+                    style: TextStyle(fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: () =>
+                        ref.read(appServiceProvider.notifier).refreshApps(),
+                    child: const Text("Refresh"),
+                  ),
+                ],
               ),
-            );
+            ),
+          ),
+        ),
+      );
+    }
+
+    // 1. Flatten categories into a single indexable list for TRUE lazy loading
+    final List<AppListItemType> flattenedItems = [];
+    for (final category in categories) {
+      final apps = groupedApps[category] ?? [];
+      if (apps.isNotEmpty) {
+        flattenedItems.add(CategoryHeaderItem(category, apps.length));
+        for (final app in apps) {
+          flattenedItems.add(SingleAppItem(app));
+        }
+      }
+    }
+
+    return Scaffold(
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(appServiceProvider.notifier).refreshApps();
         },
+        child: CustomScrollView(
+          physics: const BouncingScrollPhysics(
+            parent: AlwaysScrollableScrollPhysics(),
+          ),
+          slivers: [
+            // 2. Hero Section
+            SliverToBoxAdapter(child: _buildHeroSection(randomApps)),
+
+            // 3. Fully lazy-rendered items with dynamic extents per item type
+            SliverVariedExtentList.builder(
+              itemCount: flattenedItems.length,
+              itemExtentBuilder: (index, dimensions) {
+                final item = flattenedItems[index];
+                if (item is CategoryHeaderItem) {
+                  return 52.0; // Header height
+                }
+                return 130.0; // AppsListItem height
+              },
+              itemBuilder: (context, index) {
+                final item = flattenedItems[index];
+
+                if (item is CategoryHeaderItem) {
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          item.title,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "${item.count} apps",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                if (item is SingleAppItem) {
+                  return AppsListItem(
+                    app: item.app,
+                    onTap: () => _openApp(item.app),
+                  );
+                }
+
+                return const SizedBox.shrink();
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

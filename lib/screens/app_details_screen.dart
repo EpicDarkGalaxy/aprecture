@@ -1,62 +1,83 @@
 import 'package:aprecture/models/app.dart';
-import 'package:aprecture/services/download_service.dart';
 import 'package:aprecture/services/app_service.dart';
+import 'package:aprecture/widgets/get_button.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 import 'package:aprecture/services/logger.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-class AppDetailsScreen extends StatefulWidget {
-  final App _app;
+class AppDetailsScreen extends ConsumerStatefulWidget {
+  final String _appId;
 
-  const AppDetailsScreen({super.key, required this._app});
+  const AppDetailsScreen({super.key, required this._appId});
 
   @override
-  State<AppDetailsScreen> createState() => _AppDetailsSreenState();
+  ConsumerState<AppDetailsScreen> createState() => _AppDetailsScreenState();
 }
 
-class _AppDetailsSreenState extends State<AppDetailsScreen> {
-  final DownloadService _downloadService = DownloadService();
-  final AppService _appService = AppService();
-  App get app => widget._app;
+class _AppDetailsScreenState extends ConsumerState<AppDetailsScreen> {
+  late App app;
 
-  String _selectedSource = '';
+  late String _selectedSource;
   bool _descriptionExpanded = false;
 
-  Widget appIcon() {
-    return SizedBox(
-      width: 100,
-      height: 100,
-      child: CircleAvatar(
+  @override
+  void initState() {
+    super.initState();
+    app = ref.read(appServiceProvider.notifier).getApp(widget._appId);
+
+    _selectedSource = app.sourceNames.isNotEmpty
+        ? app.sourceNames.keys.first
+        : '';
+  }
+
+  Widget _buildAppIcon(ColorScheme colorScheme) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 96,
+        height: 96,
+        color: colorScheme.surfaceContainerHigh,
         child: app.iconUrl.isNotEmpty
             ? Image.network(
                 app.iconUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.android),
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.android,
+                  size: 48,
+                  color: colorScheme.onSurfaceVariant,
+                ),
               )
-            : const Icon(Icons.android),
+            : Icon(
+                Icons.android,
+                size: 48,
+                color: colorScheme.onSurfaceVariant,
+              ),
       ),
     );
   }
 
-  Widget appSources() {
-    return DropdownMenu(
-      initialSelection: app.sourceNames.isNotEmpty
-          ? app.sourceNames.keys.first
-          : null,
-      selectOnly: true,
-      label: const Text('Sources'),
+  Widget _buildSourcesDropdown(ColorScheme colorScheme) {
+    if (app.sourceNames.isEmpty) return const SizedBox.shrink();
+
+    return DropdownMenu<String>(
+      initialSelection: _selectedSource,
+      label: const Text('Source'),
+      onSelected: (String? value) {
+        if (value != null) {
+          setState(() {
+            _selectedSource = value;
+          });
+          logger.d("Selected Source: $_selectedSource");
+        }
+      },
       dropdownMenuEntries: app.sourceNames.keys.map((source) {
-        _selectedSource = source;
-        logger.d("Selected Source: $_selectedSource");
         return DropdownMenuEntry(value: source, label: source);
       }).toList(),
     );
   }
 
-  Widget appExternalLinks() {
-    // Test
+  Widget _buildExternalLinks() {
     logger.d(
       "External Links: ${app.sourceCode}, ${app.issueTracker}, ${app.webSite}",
     );
@@ -73,19 +94,19 @@ class _AppDetailsSreenState extends State<AppDetailsScreen> {
       children: [
         if (app.sourceCode.isNotEmpty)
           ActionChip(
-            avatar: const Icon(Icons.code),
+            avatar: const Icon(Icons.code, size: 18),
             label: const Text('Source Code'),
             onPressed: () => launchUrl(Uri.parse(app.sourceCode)),
           ),
         if (app.issueTracker.isNotEmpty)
           ActionChip(
-            avatar: const Icon(Icons.bug_report),
+            avatar: const Icon(Icons.bug_report, size: 18),
             label: const Text('Issue Tracker'),
             onPressed: () => launchUrl(Uri.parse(app.issueTracker)),
           ),
         if (app.webSite.isNotEmpty)
           ActionChip(
-            avatar: const Icon(Icons.web),
+            avatar: const Icon(Icons.language, size: 18),
             label: const Text('Website'),
             onPressed: () => launchUrl(Uri.parse(app.webSite)),
           ),
@@ -93,109 +114,93 @@ class _AppDetailsSreenState extends State<AppDetailsScreen> {
     );
   }
 
-  Widget appName() {
+  Widget _buildAppName(TextTheme textTheme, ColorScheme colorScheme) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Text(
             app.name,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
+            ),
           ),
-          Text(
-            app.versionName,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 16),
-          ),
-          Text(
-            app.author,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 16),
-          ),
-          Text(
-            app.categories.join(', '),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 16),
-          ),
+          if (app.versionName.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              app.versionName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: textTheme.titleSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget appGetButton() {
-    return ElevatedButton(
-      onPressed: () => _downloadService.downloadApp(
-        url: app.downloadUrl(_selectedSource),
-        packageName: app.packageName,
-      ),
-      child: Text("Get"),
-    );
-  }
+  Widget _buildDeveloper(TextTheme textTheme, ColorScheme colorScheme) {
+    if (app.author.isEmpty) return const SizedBox.shrink();
 
-  Widget appInstallButton() {
-    return ElevatedButton(
-      onPressed: () => _appService.installApp(
-        _downloadService.getFilePath(app.packageName)!,
-      ),
-      child: Text("Install"),
-    );
-  }
-
-  Widget appOpenButton() {
-    return ElevatedButton(
-      onPressed: () => _appService.openApp(app.packageName),
-      child: Text("Open"),
-    );
-  }
-
-  // Widget appUninstallButton() {
-  //   return ElevatedButton(
-  //     onPressed: () => _appService.uninstallApp(app.packageName),
-  //     child: Text("Uninstall"),
-  //   );
-  // }
-
-  Widget appDownloadProgress() {
-    return ListenableBuilder(
-      listenable: _downloadService,
-      builder: (context, child) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            SizedBox(
-              child: CircularProgressIndicator(
-                value: _downloadService.getProgress(app.packageName),
-              ),
+    return Text.rich(
+      TextSpan(
+        style: textTheme.bodyMedium?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
+        children: [
+          const TextSpan(text: 'By '),
+          TextSpan(
+            text: app.author,
+            style: textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: colorScheme.onSurface,
             ),
-            Text(
-              '${(_downloadService.getProgress(app.packageName) * 100).round()}%',
-              style: const TextStyle(color: Colors.black),
+          ),
+        ],
+      ),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  Widget _buildCategories(ColorScheme colorScheme, TextTheme textTheme) {
+    if (app.categories.isEmpty) return const SizedBox.shrink();
+
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: app.categories.map((category) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            category,
+            style: textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSecondaryContainer,
+              fontWeight: FontWeight.w600,
             ),
-          ],
+          ),
         );
-      },
+      }).toList(),
     );
   }
 
-  Widget appScreenshots() {
+  Widget _buildScreenshots(ColorScheme colorScheme) {
     if (app.screenshots.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Screenshots',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
         SizedBox(
-          height: 200,
+          height: 220,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: app.screenshots.length,
@@ -209,15 +214,27 @@ class _AppDetailsSreenState extends State<AppDetailsScreen> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
-                    color: Colors.grey.shade200,
+                    color: colorScheme.surfaceContainerHigh,
                     child: Image.network(
                       url,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Center(child: Icon(Icons.broken_image)),
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        width: 120,
+                        color: colorScheme.surfaceContainerHigh,
+                        child: Icon(
+                          Icons.broken_image,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
-                        return const Center(child: CircularProgressIndicator());
+                        return Container(
+                          width: 120,
+                          color: colorScheme.surfaceContainerHigh,
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        );
                       },
                     ),
                   ),
@@ -230,104 +247,125 @@ class _AppDetailsSreenState extends State<AppDetailsScreen> {
     );
   }
 
-  Widget appDescription() {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _descriptionExpanded = !_descriptionExpanded;
-        });
-      },
-      child: Stack(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            width: double.infinity,
-            padding: const EdgeInsets.all(16.0),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(16.0),
-              border: Border.all(color: Colors.grey.shade400, width: 2.0),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  app.description,
-                  style: const TextStyle(fontSize: 16),
-                  maxLines: _descriptionExpanded ? null : 3,
-                  overflow: _descriptionExpanded
-                      ? TextOverflow.visible
-                      : TextOverflow.ellipsis,
-                ),
-                HtmlWidget(
-                  app.description,
-                  textStyle: const TextStyle(fontSize: 16),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _buildDescription(ColorScheme colorScheme, TextTheme textTheme) {
+    if (app.description.isEmpty) return const SizedBox.shrink();
 
-  Widget buildDownloadActionButton() {
-    return FutureBuilder<bool>(
-      future: _appService.isAppInstalled(app.packageName),
-      builder: (context, snapshot) {
-        if (snapshot.hasData && snapshot.data!) {
-          return appOpenButton();
-        }
-        if (_downloadService.isDownloading(app.packageName) &&
-            !_downloadService.isCompleted(app.packageName)) {
-          return appDownloadProgress();
-        }
-        if (_downloadService.isCompleted(app.packageName)) {
-          return appInstallButton();
-        }
-        return appGetButton();
-      },
+    return Card(
+      elevation: 0,
+      color: colorScheme.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16.0),
+        side: BorderSide(color: colorScheme.outlineVariant, width: 1.0),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16.0),
+        onTap: () {
+          setState(() {
+            _descriptionExpanded = !_descriptionExpanded;
+          });
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                app.description,
+                maxLines: _descriptionExpanded ? null : 3,
+                overflow: _descriptionExpanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              const SizedBox(height: 8.0),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    _descriptionExpanded ? 'Read less' : 'Read more',
+                    style: textTheme.labelLarge?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Icon(
+                    _descriptionExpanded
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    color: colorScheme.primary,
+                    size: 18,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
     return Scaffold(
-      appBar: AppBar(title: Text(app.name)),
+      appBar: AppBar(title: Text(app.name), centerTitle: false),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Top Row: App Icon + App Name & Version
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                appIcon(),
+                _buildAppIcon(colorScheme),
                 const SizedBox(width: 16.0),
-                appName(),
-                const SizedBox(width: 16.0),
-                SizedBox(
-                  height: 100,
-                  child: ListenableBuilder(
-                    listenable: _downloadService,
-                    builder: (context, child) {
-                      return Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [buildDownloadActionButton()],
-                      );
-                    },
-                  ),
-                ),
+                _buildAppName(textTheme, colorScheme),
               ],
             ),
             const SizedBox(height: 16.0),
-            appSources(),
+
+            // Get / Download Action Row
+            SizedBox(
+              width: double.infinity,
+              child: GetButton(
+                name: app.name,
+                packageName: app.packageName,
+                downloadUrl: app.downloadUrl(
+                  _selectedSource.isNotEmpty
+                      ? _selectedSource
+                      : (app.sourceNames.isNotEmpty
+                            ? app.sourceNames.keys.first
+                            : ''),
+                ),
+              ),
+            ),
             const SizedBox(height: 16.0),
-            appExternalLinks(),
+
+            // Developer & Categories
+            _buildDeveloper(textTheme, colorScheme),
+            const SizedBox(height: 8.0),
+            _buildCategories(colorScheme, textTheme),
             const SizedBox(height: 16.0),
-            appScreenshots(),
-            const SizedBox(height: 16.0),
-            appDescription(),
-            const SizedBox(height: 64.0),
+
+            // Sources Dropdown & External Action Links
+            _buildSourcesDropdown(colorScheme),
+            const SizedBox(height: 12.0),
+            _buildExternalLinks(),
+            const SizedBox(height: 20.0),
+
+            // Screenshots Gallery
+            _buildScreenshots(colorScheme),
+            const SizedBox(height: 20.0),
+
+            // Description Box
+            _buildDescription(colorScheme, textTheme),
+            const SizedBox(height: 32.0),
           ],
         ),
       ),

@@ -1,52 +1,28 @@
+// lib/screens/main_wrapper.dart
 import 'package:flutter/material.dart';
-import 'package:aprecture/screens/tabs/apps_screen.dart';
-import 'package:aprecture/screens/tabs/search_screen.dart';
-import 'package:aprecture/screens/tabs/settings_screen.dart';
+import 'package:go_router/go_router.dart';
 
+class NavigationShell extends StatelessWidget {
+  final StatefulNavigationShell navigationShell;
 
-class NavigationShell extends StatefulWidget {
-  const NavigationShell({super.key});
-
-  @override
-  State<NavigationShell> createState() => _NavigationShellState();
-}
-
-class _NavigationShellState extends State<NavigationShell> {
-  int _selectedIndex = 0;
-
-  static const List<Widget> _tabs = [
-    AppsScreen(),
-    SearchScreen(),
-    SettingsScreen(),
-  ];
+  const NavigationShell({super.key, required this.navigationShell});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _tabs,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
+      body: navigationShell,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: navigationShell.currentIndex,
+        onDestinationSelected: (int index) {
+          navigationShell.goBranch(
+            index,
+            initialLocation: index == navigationShell.currentIndex,
+          );
         },
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.apps),
-            label: 'Apps',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.search),
-            label: 'Search',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.apps), label: 'Apps'),
+          NavigationDestination(icon: Icon(Icons.search), label: 'Search'),
+          NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
       ),
     );

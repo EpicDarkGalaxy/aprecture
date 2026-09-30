@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 class App {
+  final String appId; // Unique identifier for the app
   final String name; // Display name of the app, e.g., "F-Droid"
   final String
   packageName; // Unique package name of the app, e.g., "org.fdroid.fdroid"
@@ -19,6 +22,7 @@ class App {
       >{}; // List of sources where the app is available and their URLs
 
   App({
+    required this.appId,
     required this.name,
     required this.packageName,
     required this.versionName,
@@ -42,10 +46,12 @@ class App {
   }
 
   factory App.fromJson({
+    required String appId,
     required String packageName,
     required Map<String, dynamic> json,
   }) {
     return App(
+      appId: appId,
       name: json['name'] ?? 'NONAME',
       packageName: packageName,
       versionName: json['versionName'] ?? 'NOVERSION',

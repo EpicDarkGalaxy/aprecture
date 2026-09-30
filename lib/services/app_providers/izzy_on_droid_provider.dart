@@ -1,11 +1,12 @@
 import 'dart:convert';
+import 'package:aprecture/utils/utils.dart';
 import 'package:http/http.dart' as http;
 import 'package:aprecture/services/logger.dart';
-import 'package:aprecture/services/providers/app_source.dart';
+import 'package:aprecture/services/app_providers/app_source_abstract.dart';
 
 class IzzyOnDroidProvider extends AppSource {
   IzzyOnDroidProvider({http.Client? httpClient})
-      : _httpClient = httpClient ?? http.Client();
+    : _httpClient = httpClient ?? http.Client();
 
   final http.Client _httpClient;
 
@@ -15,7 +16,8 @@ class IzzyOnDroidProvider extends AppSource {
   static const String _fingerprint =
       '3BF0D6ABFEAE2F401707B6D966BE743BF0EEE49C2561B9BA39073711F628937A';
   static const String _repoBaseUrl = 'https://apt.izzysoft.de/fdroid/repo';
-  static const String _indexUrl = '$_repoBaseUrl/index-v2.json?fingerprint=$_fingerprint';
+  static const String _indexUrl =
+      '$_repoBaseUrl/index-v2.json?fingerprint=$_fingerprint';
 
   String _getLocalized(String key, Map<String, dynamic> metadata) {
     final localized = metadata[key];
@@ -72,19 +74,6 @@ class IzzyOnDroidProvider extends AppSource {
     return const [];
   }
 
-  String _cleanHtml(String htmlString) {
-    if (htmlString.isEmpty) return '';
-    final stripped = htmlString.replaceAll(RegExp(r'<[^>]*>'), '');
-    return stripped
-        .replaceAll('&amp;', '&')
-        .replaceAll('&lt;', '<')
-        .replaceAll('&gt;', '>')
-        .replaceAll('&quot;', '"')
-        .replaceAll('&#39;', "'")
-        .replaceAll('&nbsp;', ' ')
-        .trim();
-  }
-
   @override
   Future<Map<String, dynamic>> fetchApps() async {
     try {
@@ -130,8 +119,8 @@ class IzzyOnDroidProvider extends AppSource {
           formattedData[packageName] = {
             'name': _getLocalized('name', metadata),
             'versionName': _getVersionName(pkg),
-            'summary': _cleanHtml(_getLocalized('summary', metadata)),
-            'description': _cleanHtml(_getLocalized('description', metadata)),
+            'summary': _getLocalized('summary', metadata),
+            'description': cleanHtml(_getLocalized('description', metadata)),
             'categories': (metadata['categories'] as List?) ?? const [],
             'iconUrl': _getIconUrl(metadata),
             'screenshots': _getScreenshots(metadata),
@@ -148,10 +137,15 @@ class IzzyOnDroidProvider extends AppSource {
         return formattedData;
       }
 
-      logger.e('Failed to fetch apps from IzzyOnDroid. Status code: ${response.statusCode}');
+      logger.e(
+        'Failed to fetch apps from IzzyOnDroid. Status code: ${response.statusCode}',
+      );
       return {};
     } catch (e, stackTrace) {
-      logger.e('Error fetching apps from IzzyOnDroid: $e', stackTrace: stackTrace);
+      logger.e(
+        'Error fetching apps from IzzyOnDroid: $e',
+        stackTrace: stackTrace,
+      );
       return {};
     }
   }

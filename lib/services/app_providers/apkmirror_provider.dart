@@ -1,5 +1,5 @@
 import 'package:aprecture/services/logger.dart';
-import 'package:aprecture/services/providers/app_source.dart';
+import 'package:aprecture/services/app_providers/app_source_abstract.dart';
 
 class ApkMirrorProvider extends AppSource {
   @override

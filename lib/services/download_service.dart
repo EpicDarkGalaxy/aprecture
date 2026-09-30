@@ -1,113 +1,165 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:http/http.dart' as http;
 import 'package:aprecture/services/logger.dart';
 import 'package:path_provider/path_provider.dart';
 
+part 'download_service.g.dart';
+
 class DownloadSnapshot {
-  // Using DownloadSnapshot to track download progress because its easy to me
   final String name;
   final String url;
   final String filePath;
-  bool isDownloading = true;
-  bool isCompleted = false;
-  double progress = 0.0;
+  final bool isDownloading;
+  final bool isLoading;
+  final bool isCompleted;
+  final double progress;
 
   DownloadSnapshot({
     required this.name,
     required this.url,
     required this.filePath,
+    this.isDownloading = true,
+    this.isLoading = true,
+    this.isCompleted = false,
+    this.progress = 0.0,
   });
+
+  DownloadSnapshot copyWith({
+    bool? isDownloading,
+    bool? isLoading,
+    bool? isCompleted,
+    double? progress,
+  }) {
+    return DownloadSnapshot(
+      name: name,
+      url: url,
+      filePath: filePath,
+      isDownloading: isDownloading ?? this.isDownloading,
+      isLoading: isLoading ?? this.isLoading,
+      isCompleted: isCompleted ?? this.isCompleted,
+      progress: progress ?? this.progress,
+    );
+  }
 }
 
-class DownloadService extends ChangeNotifier {
-  static final DownloadService _instance = DownloadService._internal();
+@riverpod
+bool isDownloading(Ref ref, String packageName) {
+  final downloadsMap = ref.watch(downloadServiceProvider);
+  return downloadsMap[packageName]?.isDownloading ?? false;
+}
 
-  factory DownloadService() {
-    return _instance;
+@riverpod
+bool isLoading(Ref ref, String packageName) {
+  final downloadsMap = ref.watch(downloadServiceProvider);
+  return downloadsMap[packageName]?.isLoading ?? false;
+}
+
+@riverpod
+bool isCompleted(Ref ref, String packageName) {
+  final downloadsMap = ref.watch(downloadServiceProvider);
+  return downloadsMap[packageName]?.isCompleted ?? false;
+}
+
+@riverpod
+double downloadProgress(Ref ref, String packageName) {
+  final downloadsMap = ref.watch(downloadServiceProvider);
+  return downloadsMap[packageName]?.progress ?? 0.0;
+}
+
+@riverpod
+class DownloadService extends _$DownloadService {
+  late final http.Client _httpClient;
+
+  @override
+  Map<String, DownloadSnapshot> build() {
+    _httpClient = http.Client();
+    return {};
   }
-  DownloadService._internal() : _httpClient = http.Client();
 
-  final http.Client _httpClient;
-  final Map<String, DownloadSnapshot> _downloadQueue = {};
-
-  void addToQueue(String packageName, DownloadSnapshot snapshot) {
-    _downloadQueue[packageName] = snapshot;
-    notifyListeners();
-  }
-
-  bool isDownloading(String packageName) {
-    return _downloadQueue[packageName]?.isDownloading ?? false;
-  }
-
-  bool isCompleted(String packageName) {
-    return _downloadQueue[packageName]?.isCompleted ?? false;
-  }
-
-  String? getFilePath(String packageName) {
-    return _downloadQueue[packageName]?.filePath;
-  }
-
-  double getProgress(String packageName) {
-    return _downloadQueue[packageName]?.progress ?? 0.0;
+  void _updateSnapshot(String packageName, DownloadSnapshot snapshot) {
+    state = {...state, packageName: snapshot};
   }
 
   Future<void> downloadApp({
     required String url,
     required String packageName,
+    required String name,
   }) async {
-    if (isDownloading(packageName)) return; // Already downloading, skip
+    if (state[packageName]?.isDownloading ?? false) return;
 
-    final request = http.Request('GET', Uri.parse(url));
     try {
-      final response = await _httpClient.send(request);
-
       final tmpDir = await getTemporaryDirectory();
       final filePath = '${tmpDir.path}/$packageName.apk';
-      final sink = File(filePath).openWrite();
+
+      // 1. Initialize snapshot in state
+      final initialSnapshot = DownloadSnapshot(
+        name: name,
+        url: url,
+        filePath: filePath,
+        isDownloading: true,
+        isCompleted: false,
+        isLoading: true,
+        progress: 0.0,
+      );
+      _updateSnapshot(packageName, initialSnapshot);
+
+      final request = http.Request('GET', Uri.parse(url));
+      final response = await _httpClient.send(request);
 
       if (response.statusCode != 200) {
-        logger.e("Downloading app failed: status code ${response.statusCode}");
-        return;
-      } else {
-        addToQueue(
+        logger.e("Download failed with status: ${response.statusCode}");
+        _updateSnapshot(
           packageName,
-          DownloadSnapshot(name: packageName, url: url, filePath: filePath),
+          initialSnapshot.copyWith(isDownloading: false),
         );
-        logger.i("Downloading app started: $url");
+        return;
       }
 
-      final contentLength = response.contentLength;
+      final file = File(filePath);
+      final sink = file.openWrite();
+      final contentLength = response.contentLength ?? 0;
       var downloadedBytes = 0;
 
-      response.stream.listen(
-        (List<int> data) {
-          if (contentLength != null) {
-            downloadedBytes += data.length;
-            final progress = downloadedBytes / contentLength;
-            _downloadQueue[packageName]?.progress = progress;
-            sink.add(data);
-            notifyListeners();
+      await for (final chunk in response.stream) {
+        downloadedBytes += chunk.length;
+        sink.add(chunk);
+
+        if (contentLength > 0) {
+          final progress = downloadedBytes / contentLength;
+          final current = state[packageName];
+          if (current != null) {
+            _updateSnapshot(
+              packageName,
+              current.copyWith(progress: progress, isLoading: false),
+            );
           }
-        },
-        onDone: () {
-          // State: Downloading -> Completed
-          _downloadQueue[packageName]?.isDownloading = false;
-          _downloadQueue[packageName]?.isCompleted = true;
-          sink.close();
-          logger.d("Downloading app completed: $packageName");
-          notifyListeners();
-        },
-        onError: (e) {
-          logger.e("Downloading app failed: $e");
-          _downloadQueue[packageName]?.isDownloading = false;
-          sink.close();
-          notifyListeners();
-        },
-      );
-    } catch (e) {
-      logger.e("Downloading app failed: $e");
-      return;
+        }
+      }
+
+      await sink.flush();
+      await sink.close();
+
+      // 2. Mark download complete
+      final finalSnapshot = state[packageName];
+      if (finalSnapshot != null) {
+        _updateSnapshot(
+          packageName,
+          finalSnapshot.copyWith(
+            isDownloading: false,
+            isCompleted: true,
+            progress: 1.0,
+          ),
+        );
+      }
+      logger.i("Download complete: $packageName");
+    } catch (e, stack) {
+      logger.e("Download error: $e", stackTrace: stack);
+      final current = state[packageName];
+      if (current != null) {
+        _updateSnapshot(packageName, current.copyWith(isDownloading: false));
+      }
     }
   }
 }

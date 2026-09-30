@@ -1,166 +1,240 @@
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:aprecture/models/app.dart';
 import 'package:aprecture/services/logger.dart';
-import 'package:aprecture/services/providers/providers_map.dart';
-import 'package:aprecture/services/providers/app_source.dart';
+import 'package:aprecture/services/app_providers/providers_map.dart';
+import 'package:aprecture/services/app_providers/app_source_abstract.dart';
+import 'package:aprecture/services/download_service.dart';
 import 'package:aprecture/utils/utils.dart' as utils;
 
-class AppService extends ChangeNotifier {
-  AppService._internal([
-    List<AppSource>? sources,
-    List<AppSource>? optInSources,
-  ]) : _sources = sources ?? const <AppSource>[],
-       _optInSources = optInSources ?? const <AppSource>[];
+part 'app_service.g.dart';
 
-  static final AppService _instance = AppService._internal([
-    ...providersMap['Default']!.values,
-  ], []);
-  factory AppService() => _instance;
+class AppState {
+  final App app;
+  bool isInstalled;
 
-  factory AppService.withConfiguredSources({
+  AppState({required this.app, required this.isInstalled});
+}
+
+class AppServiceState {
+  final List<AppState> apps;
+  final List<App> searchedApps;
+  final List<App> randomApps;
+  final Map<String, List<App>> groupedApps;
+  final List<String> categories;
+  final bool isLoading;
+  final List<AppSource> sources;
+  final List<AppSource> optInSources;
+
+  AppServiceState({
+    required this.apps,
+    required this.searchedApps,
+    required this.randomApps,
+    required this.groupedApps,
+    required this.categories,
+    required this.isLoading,
+    required this.sources,
+    required this.optInSources,
+  });
+
+  AppServiceState copyWith({
+    List<AppState>? apps,
+    List<App>? searchedApps,
+    List<App>? randomApps,
+    Map<String, List<App>>? groupedApps,
+    List<String>? categories,
+    bool? isLoading,
     List<AppSource>? sources,
     List<AppSource>? optInSources,
   }) {
-    final safeSources = (sources ?? [...providersMap['Default']!.values])
-        .where((source) => !source.isOptIn)
-        .toList();
-    final enabledOptIn = (optInSources ?? const <AppSource>[])
-        .where((source) => source.isOptIn)
-        .toList();
+    return AppServiceState(
+      apps: apps ?? this.apps,
+      searchedApps: searchedApps ?? this.searchedApps,
+      randomApps: randomApps ?? this.randomApps,
+      groupedApps: groupedApps ?? this.groupedApps,
+      categories: categories ?? this.categories,
+      isLoading: isLoading ?? this.isLoading,
+      sources: sources ?? this.sources,
+      optInSources: optInSources ?? this.optInSources,
+    );
+  }
+}
 
-    return AppService._internal(safeSources, enabledOptIn);
+@riverpod
+Future<bool> isAppInstalled(Ref ref, String packageName) async {
+  logger.i('isAppInstalled checking for: $packageName');
+  if (!Platform.isAndroid) {
+    logger.w('isAppInstalled is only supported on Android');
+    return false;
+  }
+  return await InstalledApps.isAppInstalled(packageName) ?? false;
+}
+
+@riverpod
+class AppService extends _$AppService {
+  late final File _cacheFile;
+  late final List<AppSource> _sources;
+  List<AppSource> _optInSources = [];
+
+  @override
+  AppServiceState build() {
+    _cacheFile = File("${Directory.systemTemp.path}/apps_cache.json");
+    _sources = providersMap['Default']?.values.toList() ?? [];
+
+    return AppServiceState(
+      apps: [],
+      searchedApps: [],
+      randomApps: [],
+      groupedApps: {},
+      categories: [],
+      isLoading: false,
+      sources: _sources,
+      optInSources: _optInSources,
+    );
   }
 
-  factory AppService.withSources(List<AppSource> sources) {
-    return AppService.withConfiguredSources(sources: sources);
-  }
+  void _updateState({
+    List<AppState>? apps,
+    List<App>? searchedApps,
+    List<App>? randomApps,
+    Map<String, List<App>>? groupedApps,
+    List<String>? categories,
+    bool? isLoading,
+    List<AppSource>? sources,
+    List<AppSource>? optInSources,
+  }) {
+    if (!ref.mounted) return;
 
-  factory AppService.withOptInSources(List<AppSource> optInSources) {
-    return AppService.withConfiguredSources(
-      sources: [...providersMap['Default']!.values],
+    state = state.copyWith(
+      apps: apps,
+      searchedApps: searchedApps,
+      randomApps: randomApps,
+      groupedApps: groupedApps,
+      categories: categories,
+      isLoading: isLoading,
+      sources: sources,
       optInSources: optInSources,
     );
   }
 
-  final List<AppSource> _sources; // List of sources for the app service
-  final List<AppSource>
-  _optInSources; // List of opt-in sources for the app service
-
-  bool _isLoading = false; // Whether the app service is currently loading apps
-  List<App> _apps = [];
-
-  bool get isLoading => _isLoading;
-  List<App> get apps => _apps;
-
-  List<AppSource> get optInSources => _instance._optInSources;
-
-  static File get cacheFile =>
-      File("${Directory.systemTemp.path}/apps_cache.json");
-
   void toggleOptInSource(AppSource source) {
-    if (_optInSources.contains(source)) {
-      _optInSources.remove(source);
+    final updated = List<AppSource>.from(_optInSources);
+    if (updated.contains(source)) {
+      updated.remove(source);
     } else {
-      _optInSources.add(source);
+      updated.add(source);
     }
-    notifyListeners();
+    _optInSources = updated;
+    _updateState(optInSources: _optInSources);
   }
 
   Future<void> clearCache() async {
-    if (await cacheFile.exists()) {
-      await cacheFile.delete();
+    if (await _cacheFile.exists()) {
+      await _cacheFile.delete();
       logger.i("Cache cleared");
     }
   }
 
   Future<void> refreshIndex() async {
-    _apps
-        .clear(); // Clear the current list of apps to avoid showing stale data while refreshing and duplicates after refresh
-    await clearCache(); // Clear the cache to force a fresh fetch from F-Droid
+    await clearCache();
     await refreshApps();
     logger.i("Index refreshed");
   }
 
   Future<void> writeAppsToCache(Map<String, dynamic> apps) async {
     final json = jsonEncode(apps);
-    await cacheFile.writeAsString(json);
+    await _cacheFile.writeAsString(json);
   }
 
-  Future<bool> isAppInstalled(String packageName) async {
-    return await InstalledApps.isAppInstalled(packageName) ?? false;
+  App getApp(String appId) {
+    return state.apps.firstWhere((app) => app.app.appId == appId).app;
   }
 
-  Future<void> installApp(String appPath) async {
+  Future<void> installApp(String appPath, String packageName) async {
+    if (!Platform.isAndroid) {
+      logger.w('installApp is only supported on Android');
+      return;
+    }
+
     final result = await OpenFilex.open(appPath);
     if (result.type != ResultType.done) {
       logger.e('Failed to install app: ${result.message}');
       return;
     }
+    final appsState = state.apps;
+    appsState
+            .where((app) => app.app.packageName == packageName)
+            .first
+            .isInstalled =
+        true;
+    _updateState(apps: appsState);
     logger.i('App installed successfully');
   }
-
-  // Future<void> uninstallApp(String packageName) async {
-  //   final result = await OpenFilex.open('package:$packageName');
-  //   if (result.type != ResultType.done) {
-  //     logger.e('Failed to uninstall app: ${result.message}');
-  //     return;
-  //   }
-  //   logger.i('App uninstalled successfully');
-  // }
 
   Future<bool> openApp(String packageName) async {
     return await InstalledApps.startApp(packageName) ?? false;
   }
 
-  static List<App> _parsePackages(String packagesJsonString) {
-    // Convert the JSON string to a map and then to a list of App objects
-    logger.d('Wrapping packages into a list of App objects...');
+  Future<List<App>> getRandomApps(List<App> apps) async {
+    if (apps.isEmpty) return [];
+
+    final maxCount = 5;
+    final newRandomApps = <App>[];
+
+    for (var i = 0; i < maxCount; i++) {
+      final app = apps[Random().nextInt(apps.length)];
+      if (app.iconUrl.isNotEmpty) {
+        newRandomApps.add(app);
+      }
+    }
+    return newRandomApps;
+  }
+
+  static Future<List<App>> _parsePackages(String packagesJsonString) async {
     final Map<String, dynamic> packages = jsonDecode(packagesJsonString);
     final List<App> apps = [];
     for (final package in packages.entries) {
-      final app = App.fromJson(packageName: package.key, json: package.value);
+      final app = App.fromJson(
+        appId: package.key,
+        packageName: package.key,
+        json: package.value,
+      );
       apps.add(app);
     }
-    logger.d('Parsed ${apps.length} apps');
     return apps;
   }
 
-  Future<Map<String, dynamic>> fetchAppsFromSources() async {
-    // Fetch apps from all sources and merge them into a single map
-    final merged = <String, dynamic>{};
-    final sources = <AppSource>[..._sources, ..._optInSources];
-
-    for (final source in sources) {
-      final data = await source.fetchApps();
-      for (final entry in data.entries) {
-        merged.putIfAbsent(entry.key, () => entry.value);
-      }
+  /// Group apps by their first category
+  static Map<String, List<App>> _groupByCategory(List<App> apps) {
+    final Map<String, List<App>> grouped = {};
+    for (final app in apps) {
+      final category = app.categories.isNotEmpty
+          ? app.categories.first
+          : 'Other';
+      grouped.putIfAbsent(category, () => []).add(app);
     }
-
-    return merged;
+    return grouped;
   }
 
   Future<void> refreshApps() async {
-    // Refresh apps by fetching from sources and caching the result
-    _isLoading = true;
-    notifyListeners();
-
+    _updateState(isLoading: true);
     String packagesJsonString = '';
     try {
-      if (await cacheFile.exists() && await cacheFile.length() > 0) {
-        packagesJsonString = await cacheFile.readAsString();
+      if (await _cacheFile.exists() && await _cacheFile.length() > 0) {
+        packagesJsonString = await _cacheFile.readAsString();
         logger.d('Loaded apps from cache');
       } else {
         final appsMap = await fetchAppsFromSources();
         if (appsMap.isEmpty) {
           logger.e('No apps fetched from configured sources');
-          _isLoading = false;
-          notifyListeners();
+          _updateState(isLoading: false);
           return;
         }
         await writeAppsToCache(appsMap);
@@ -171,35 +245,63 @@ class AppService extends ChangeNotifier {
       final List<App> parsedApps = await Isolate.run(
         () => _parsePackages(packagesJsonString),
       );
-      _apps = parsedApps;
+
+      final Map<String, List<App>> groupedApps = await Isolate.run(
+        () => _groupByCategory(parsedApps),
+      );
+      final List<String> categories = groupedApps.keys.toList()..sort();
+
+      final List<App> randomApps = await getRandomApps(parsedApps);
+
+      _updateState(
+        isLoading: false,
+        apps: parsedApps
+            .map((app) => AppState(app: app, isInstalled: false))
+            .toList(),
+        groupedApps: groupedApps,
+        categories: categories,
+        randomApps: randomApps,
+      );
     } catch (e) {
       logger.e('Error while refreshing apps: $e');
-    } finally {
-      _isLoading = false;
-      notifyListeners();
+      _updateState(isLoading: false);
     }
   }
 
+  Future<Map<String, dynamic>> fetchAppsFromSources() async {
+    final merged = <String, dynamic>{};
+    final sources = <AppSource>[..._sources, ..._optInSources];
+
+    for (final source in sources) {
+      final data = await source.fetchApps();
+      for (final entry in data.entries) {
+        merged.putIfAbsent(entry.key, () => entry.value);
+      }
+    }
+    return merged;
+  }
+
   List<App> searchApps(String query) {
-    logger.d('Searching for apps with query: $query');
     if (query.isEmpty) return [];
     final q = query.toLowerCase().trim();
     final terms = q.split(RegExp(r'\s+'));
-    final results = _apps.where((app) {
-      final name = app.name.toLowerCase();
-      final summary = app.summary.toLowerCase();
-      final categories = app.categories.join(' ').toLowerCase();
-      return terms.every((term) {
-        if (name.contains(term) ||
-            summary.contains(term) ||
-            categories.contains(term)) {
-          return true;
-        }
-        return utils.fuzzyMatch(name, term, 0.8); // 60%
-        // utils.fuzzyMatch(summary, term, 0.6) || // 40%
-        // utils.fuzzyMatch(categories, term, 0.7); // 30%
-      });
-    }).toList();
-    return results;
+    return state.apps
+        .where((appState) {
+          final name = appState.app.name.toLowerCase();
+          final summary = appState.app.summary.toLowerCase();
+          final categories = appState.app.categories.join(' ').toLowerCase();
+
+          return terms.every((term) {
+            if (name.contains(term) ||
+                summary.contains(term) ||
+                categories.contains(term)) {
+              return true;
+            }
+            return utils.fuzzyMatch(name, term, 0.8);
+          });
+        })
+        .toList()
+        .map((appState) => appState.app)
+        .toList();
   }
 }

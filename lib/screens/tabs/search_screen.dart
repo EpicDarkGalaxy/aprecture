@@ -1,20 +1,20 @@
+import 'package:aprecture/screens/app_details_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:aprecture/models/app.dart';
-import 'package:aprecture/screens/app_details_screen.dart';
-// import 'package:aprecture/services/logger.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:aprecture/services/logger.dart';
+import 'package:aprecture/widgets/apps_list_item.dart';
 import 'package:aprecture/services/app_service.dart';
 
-
-class SearchScreen extends StatefulWidget {
+class SearchScreen extends ConsumerStatefulWidget {
   const SearchScreen({super.key});
 
   @override
-  State<SearchScreen> createState() => _SearchScreenState();
+  ConsumerState<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _SearchScreenState extends State<SearchScreen> {
-  final _appService = AppService();
-
+class _SearchScreenState extends ConsumerState<SearchScreen> {
   List<App> _filteredApps = [];
   String _query = '';
 
@@ -25,7 +25,7 @@ class _SearchScreenState extends State<SearchScreen> {
         return;
       }
 
-      _filteredApps = _appService.searchApps(_query);
+      _filteredApps = ref.read(appServiceProvider.notifier).searchApps(_query);
     });
   }
 
@@ -40,18 +40,10 @@ class _SearchScreenState extends State<SearchScreen> {
     return ListView.builder(
       itemCount: _filteredApps.length,
       itemBuilder: (context, index) {
-        return ListTile(
-          leading: SizedBox(
-            width: 48,
-            height: 48,
-            child: Image.network(_filteredApps[index].iconUrl, errorBuilder: (context, error, stackTrace) {
-              return const Icon(Icons.android);
-            }),
-          ),
-          title: Text(_filteredApps[index].name),
-          subtitle: Text(_filteredApps[index].summary),
+        return AppsListItem(
+          app: _filteredApps[index],
           onTap: () {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => AppDetailsScreen(app: _filteredApps[index])));
+            context.push('/app-details/${_filteredApps[index].appId}');
           },
         );
       },

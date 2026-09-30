@@ -49,17 +49,21 @@ Map<String, dynamic> formatAppData({
   List<String> screenshots = const [],
 }) {
   final safeName = name.trim().isEmpty ? 'Unknown' : name.trim();
-  final safePackageName =
-      packageName.trim().isEmpty ? 'Unknown' : packageName.trim();
-  final safeVersionName =
-      versionName.trim().isEmpty ? 'Unknown' : versionName.trim();
+  final safePackageName = packageName.trim().isEmpty
+      ? 'Unknown'
+      : packageName.trim();
+  final safeVersionName = versionName.trim().isEmpty
+      ? 'Unknown'
+      : versionName.trim();
 
   final normalizedAuthor = author.trim().isEmpty
       ? 'Unknown'
       : (Uri.tryParse(author.trim()) != null &&
-                  author.trim().startsWith(RegExp(r'https?://', caseSensitive: false))
-              ? 'Active Developer'
-              : author.trim());
+                author.trim().startsWith(
+                  RegExp(r'https?://', caseSensitive: false),
+                )
+            ? 'Active Developer'
+            : author.trim());
 
   return {
     'name': safeName,
@@ -77,4 +81,17 @@ Map<String, dynamic> formatAppData({
     'webSite': webSite,
     'apkDownloadUrl': apkDownloadUrl,
   };
+}
+
+String cleanHtml(String htmlString) {
+  if (htmlString.isEmpty) return '';
+  final stripped = htmlString.replaceAll(RegExp(r'<[^>]*>'), '');
+  return stripped
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&#39;', "'")
+      .replaceAll('&nbsp;', ' ')
+      .trim();
 }
