@@ -3,6 +3,7 @@ allprojects {
         google()
         mavenCentral()
     }
+    apply(plugin = "idea")
 }
 
 val newBuildDir: Directory =

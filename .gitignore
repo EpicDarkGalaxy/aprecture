@@ -123,3 +123,11 @@ app.*.symbols
 .widget_preview/
 .idea/workspace.xml
 .idea/workspace.xml
+# IDE / Editor files
+.idea/
+.idea/workspace.xml
+*.iml
+*.ipr
+*.iws
+
+*.g.dart

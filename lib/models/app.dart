@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 class App {
   final String appId; // Unique identifier for the app
   final String name; // Display name of the app, e.g., "F-Droid"

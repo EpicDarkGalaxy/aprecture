@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:aprecture/services/app_service.dart';
 import 'package:aprecture/services/download_service.dart';
@@ -64,7 +66,10 @@ class _GetButtonState extends ConsumerState<GetButton> {
     if (isInstalled) {
       return ElevatedButton(
         onPressed: () => appService.openApp(widget.packageName),
-        child: const Text("Open"),
+        child: const Text(
+          "Open",
+          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+        ),
       );
     }
 

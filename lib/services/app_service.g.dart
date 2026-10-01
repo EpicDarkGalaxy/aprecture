@@ -58,7 +58,7 @@ final class IsAppInstalledProvider
   }
 }
 
-String _$isAppInstalledHash() => r'e90f87dc72c69900551a361888b6f5f94a2a33ae';
+String _$isAppInstalledHash() => r'4b61aa2ccbe64792149dc85a6e32fe28db48e924';
 
 final class IsAppInstalledFamily extends $Family
     with $FunctionalFamilyOverride<FutureOr<bool>, String> {
@@ -110,7 +110,7 @@ final class AppServiceProvider
   }
 }
 
-String _$appServiceHash() => r'351ee19a69246d76323b21667cc12d3e4e410116';
+String _$appServiceHash() => r'b1f2a664961569e3a91fa98fce16870a8b52e0c1';
 
 abstract class _$AppService extends $Notifier<AppServiceState> {
   AppServiceState build();

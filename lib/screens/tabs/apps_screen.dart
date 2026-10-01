@@ -38,7 +38,7 @@ class _AppsScreenState extends ConsumerState<AppsScreen> {
     });
   }
 
-  void _openApp(App app) {
+  void _openAppCard(App app) {
     context.push('/app-details/${app.appId}');
   }
 
@@ -67,7 +67,7 @@ class _AppsScreenState extends ConsumerState<AppsScreen> {
               final app = randomApps[index];
               return Padding(
                 padding: const EdgeInsets.only(right: 12),
-                child: HeroAppCard(app: app, onTap: () => _openApp(app)),
+                child: HeroAppCard(app: app, onTap: () => _openAppCard(app)),
               );
             },
           ),
@@ -185,7 +185,7 @@ class _AppsScreenState extends ConsumerState<AppsScreen> {
                 if (item is SingleAppItem) {
                   return AppsListItem(
                     app: item.app,
-                    onTap: () => _openApp(item.app),
+                    onTap: () => _openAppCard(item.app),
                   );
                 }
 

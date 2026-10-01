@@ -1,10 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:flutter/services.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:installed_apps/installed_apps.dart';
 import 'package:aprecture/models/app.dart';
@@ -12,19 +12,14 @@ import 'package:aprecture/services/logger.dart';
 import 'package:aprecture/services/app_providers/providers_map.dart';
 import 'package:aprecture/services/app_providers/app_source_abstract.dart';
 import 'package:aprecture/services/download_service.dart';
+import 'package:aprecture/services/app_sub_services//package_events.dart';
 import 'package:aprecture/utils/utils.dart' as utils;
 
 part 'app_service.g.dart';
 
-class AppState {
-  final App app;
-  bool isInstalled;
-
-  AppState({required this.app, required this.isInstalled});
-}
-
 class AppServiceState {
-  final List<AppState> apps;
+  final List<App> apps;
+  final List<PackageEvent> packageEvents;
   final List<App> searchedApps;
   final List<App> randomApps;
   final Map<String, List<App>> groupedApps;
@@ -35,6 +30,7 @@ class AppServiceState {
 
   AppServiceState({
     required this.apps,
+    required this.packageEvents,
     required this.searchedApps,
     required this.randomApps,
     required this.groupedApps,
@@ -45,7 +41,8 @@ class AppServiceState {
   });
 
   AppServiceState copyWith({
-    List<AppState>? apps,
+    List<App>? apps,
+    List<PackageEvent>? packageEvents,
     List<App>? searchedApps,
     List<App>? randomApps,
     Map<String, List<App>>? groupedApps,
@@ -56,6 +53,7 @@ class AppServiceState {
   }) {
     return AppServiceState(
       apps: apps ?? this.apps,
+      packageEvents: packageEvents ?? this.packageEvents,
       searchedApps: searchedApps ?? this.searchedApps,
       randomApps: randomApps ?? this.randomApps,
       groupedApps: groupedApps ?? this.groupedApps,
@@ -69,11 +67,18 @@ class AppServiceState {
 
 @riverpod
 Future<bool> isAppInstalled(Ref ref, String packageName) async {
-  logger.i('isAppInstalled checking for: $packageName');
-  if (!Platform.isAndroid) {
-    logger.w('isAppInstalled is only supported on Android');
-    return false;
+  final appState = ref.watch(appServiceProvider);
+
+  // Check recent live events first (latest event takes priority)
+  final event = appState.packageEvents
+      .where((e) => e.packageName == packageName)
+      .lastOrNull;
+
+  if (event != null) {
+    return event.eventType == "installed";
   }
+
+  // Fall back to initial/cached installed apps list if no event exists
   return await InstalledApps.isAppInstalled(packageName) ?? false;
 }
 
@@ -82,14 +87,22 @@ class AppService extends _$AppService {
   late final File _cacheFile;
   late final List<AppSource> _sources;
   List<AppSource> _optInSources = [];
+  late final PackageEvents _packageEvents;
 
   @override
   AppServiceState build() {
     _cacheFile = File("${Directory.systemTemp.path}/apps_cache.json");
     _sources = providersMap['Default']?.values.toList() ?? [];
+    _packageEvents = PackageEvents();
+    _packageEvents.startListening(onPackageEvent);
+
+    ref.onDispose(() {
+      _packageEvents.stopListening();
+    });
 
     return AppServiceState(
       apps: [],
+      packageEvents: [],
       searchedApps: [],
       randomApps: [],
       groupedApps: {},
@@ -101,7 +114,8 @@ class AppService extends _$AppService {
   }
 
   void _updateState({
-    List<AppState>? apps,
+    List<App>? apps,
+    List<PackageEvent>? packageEvents,
     List<App>? searchedApps,
     List<App>? randomApps,
     Map<String, List<App>>? groupedApps,
@@ -114,6 +128,7 @@ class AppService extends _$AppService {
 
     state = state.copyWith(
       apps: apps,
+      packageEvents: packageEvents,
       searchedApps: searchedApps,
       randomApps: randomApps,
       groupedApps: groupedApps,
@@ -122,6 +137,10 @@ class AppService extends _$AppService {
       sources: sources,
       optInSources: optInSources,
     );
+  }
+
+  void onPackageEvent(PackageEvent event) {
+    _updateState(packageEvents: [...state.packageEvents, event]);
   }
 
   void toggleOptInSource(AppSource source) {
@@ -154,7 +173,7 @@ class AppService extends _$AppService {
   }
 
   App getApp(String appId) {
-    return state.apps.firstWhere((app) => app.app.appId == appId).app;
+    return state.apps.firstWhere((app) => app.appId == appId);
   }
 
   Future<void> installApp(String appPath, String packageName) async {
@@ -168,13 +187,6 @@ class AppService extends _$AppService {
       logger.e('Failed to install app: ${result.message}');
       return;
     }
-    final appsState = state.apps;
-    appsState
-            .where((app) => app.app.packageName == packageName)
-            .first
-            .isInstalled =
-        true;
-    _updateState(apps: appsState);
     logger.i('App installed successfully');
   }
 
@@ -202,7 +214,8 @@ class AppService extends _$AppService {
     final List<App> apps = [];
     for (final package in packages.entries) {
       final app = App.fromJson(
-        appId: package.key,
+        appId: package
+            .key, // Right now, Using Package Name as App ID. Will change to a unique Number per package
         packageName: package.key,
         json: package.value,
       );
@@ -255,9 +268,7 @@ class AppService extends _$AppService {
 
       _updateState(
         isLoading: false,
-        apps: parsedApps
-            .map((app) => AppState(app: app, isInstalled: false))
-            .toList(),
+        apps: parsedApps,
         groupedApps: groupedApps,
         categories: categories,
         randomApps: randomApps,
@@ -285,23 +296,19 @@ class AppService extends _$AppService {
     if (query.isEmpty) return [];
     final q = query.toLowerCase().trim();
     final terms = q.split(RegExp(r'\s+'));
-    return state.apps
-        .where((appState) {
-          final name = appState.app.name.toLowerCase();
-          final summary = appState.app.summary.toLowerCase();
-          final categories = appState.app.categories.join(' ').toLowerCase();
+    return state.apps.where((app) {
+      final name = app.name.toLowerCase();
+      final summary = app.summary.toLowerCase();
+      final categories = app.categories.join(' ').toLowerCase();
 
-          return terms.every((term) {
-            if (name.contains(term) ||
-                summary.contains(term) ||
-                categories.contains(term)) {
-              return true;
-            }
-            return utils.fuzzyMatch(name, term, 0.8);
-          });
-        })
-        .toList()
-        .map((appState) => appState.app)
-        .toList();
+      return terms.every((term) {
+        if (name.contains(term) ||
+            summary.contains(term) ||
+            categories.contains(term)) {
+          return true;
+        }
+        return utils.fuzzyMatch(name, term, 0.8);
+      });
+    }).toList();
   }
 }
